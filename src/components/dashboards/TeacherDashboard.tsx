@@ -1,0 +1,920 @@
+import { useState } from "react";
+import RoleBasedHeader from "@/components/layout/RoleBasedHeader";
+import TeacherSidebar from "@/components/layout/TeacherSidebar";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { 
+  Plus, 
+  Upload, 
+  Users, 
+  BookOpen, 
+  ClipboardList, 
+  TestTube,
+  CheckSquare,
+  Calendar,
+  FileText,
+  TrendingUp
+} from "lucide-react";
+
+
+
+const TeacherDashboard = () => {
+  const [activeSection, setActiveSection] = useState("dashboard");
+  const [questions, setQuestions] = useState([
+    { question: "", options: ["", "", "", ""], correct: "A" },
+  ]);
+
+  // ✅ Handlers for create-test
+  const addQuestion = () => {
+    setQuestions([...questions, { question: "", options: ["", "", "", ""], correct: "A" }]);
+  };
+
+  const handleQuestionChange = (index, value) => {
+    const updated = [...questions];
+    updated[index].question = value;
+    setQuestions(updated);
+  };
+
+  const handleOptionChange = (qIndex, optIndex, value) => {
+    const updated = [...questions];
+    updated[qIndex].options[optIndex] = value;
+    setQuestions(updated);
+  };
+
+  const handleCorrectChange = (index, value) => {
+    const updated = [...questions];
+    updated[index].correct = value;
+    setQuestions(updated);
+  };
+
+  const removeQuestion = (index) => {
+    const updated = [...questions];
+    updated.splice(index, 1);
+    setQuestions(updated);
+  };
+
+  const teacherStats = [
+    {
+      title: "Active Courses",
+      value: "3",
+      change: "This semester",
+      icon: BookOpen,
+      color: "success"
+    },
+    {
+      title: "Total Students",
+      value: "240",
+      change: "Across all courses",
+      icon: Users,
+      color: "primary"
+    },
+    {
+      title: "Pending Submissions",
+      value: "28",
+      change: "Need grading",
+      icon: ClipboardList,
+      color: "warning"
+    },
+    {
+      title: "Tests Created",
+      value: "12",
+      change: "This month",
+      icon: TestTube,
+      color: "success"
+    }
+  ];
+  // Mock course plans (mirrors Admin)
+  const coursePlans: Record<string, { week: number; topic: string; resources?: string; assessment?: string }[]> = {
+    "1": [
+      { week: 1, topic: "Algorithm Analysis & Big-O", resources: "Slides, Book Ch.1", assessment: "Quiz" },
+      { week: 2, topic: "Stacks & Queues", resources: "Lab sheet", assessment: "Assignment 1" },
+    ],
+    "2": [
+      { week: 1, topic: "Relational Model & Keys", resources: "Slides", assessment: "Quiz" },
+      { week: 2, topic: "SQL Basics", resources: "Practice sheet", assessment: "Assignment 1" },
+    ],
+    "3": [
+      { week: 1, topic: "OSI Model", resources: "Slides", assessment: "Quiz" },
+      { week: 2, topic: "Transport Layer", resources: "Book Ch.3", assessment: "Assignment 1" },
+    ],
+  };
+
+  const courses = [
+    {
+      id: "1",
+      name: "Data Structures & Algorithms",
+      students: 45,
+      pendingSubmissions: 12,
+      nextClass: "Mon 10:00 AM",
+      resources: 15
+    },
+    {
+      id: "2", 
+      name: "Database Management Systems",
+      students: 50,
+      pendingSubmissions: 8,
+      nextClass: "Tue 2:00 PM", 
+      resources: 12
+    },
+    {
+      id: "3",
+      name: "Computer Networks",
+      students: 50,
+      pendingSubmissions: 8,
+      nextClass: "Wed 11:00 AM",
+      resources: 18
+    }
+  ];
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
+  const [attendance, setAttendance] = useState<Record<string, string>>({
+    "1": "Present",
+    "2": "Absent",
+    "3": "Present",
+  });
+
+  const students = [
+    { id: "1", name: "Ravi Kumar", roll: "21CSE001" },
+    { id: "2", name: "Priya Sharma", roll: "21CSE002" },
+    { id: "3", name: "Arjun Reddy", roll: "21CSE003" },
+  ];
+
+  const handleAttendanceChange = (id: string, status: string) => {
+    setAttendance((prev) => ({ ...prev, [id]: status }));
+  };
+
+  const handleSaveAttendance = () => {
+    console.log("Attendance saved for:", selectedDate, attendance);
+    alert(`Attendance saved for ${selectedDate}`);
+  };
+
+  const discussions = [
+    {
+      id: "1",
+      title: "Confusion about Binary Search Trees implementation",
+      content: "I'm having trouble understanding the insertion logic in BST. Can someone explain the recursive approach?",
+      course: "DSA",
+      author: "Alex Kumar",
+      timeAgo: "2 hours ago",
+      replies: 8,
+      likes: 12,
+      isResolved: false,
+      tag: "Help Needed"
+    },
+    {
+      id: "2",
+      title: "SQL JOIN operations - Inner vs Outer joins",
+      content: "What's the practical difference between INNER JOIN and LEFT OUTER JOIN? When should we use each?",
+      course: "DBMS",
+      author: "Sarah Chen",
+      timeAgo: "4 hours ago",
+      replies: 15,
+      likes: 20,
+      isResolved: true,
+      tag: "Database"
+    }
+  ];
+  const [selectedDiscussion, setSelectedDiscussion] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState<string>("");
+  const [allDiscussions, setAllDiscussions] = useState<any[]>(discussions as any[]);
+
+  const handleSelectDiscussion = (id: string) => {
+    setSelectedDiscussion((prev) => (prev === id ? null : id)); // toggle open/close
+  };
+
+  const handleReplySubmit = (discussionId: string) => {
+    if (!replyText.trim()) return alert("Please enter a reply before submitting.");
+
+    const updated = allDiscussions.map((d: any) =>
+      d.id === discussionId
+        ? {
+            ...d,
+            repliesList: [
+              ...(d.repliesList || []),
+              { author: "Teacher", content: replyText, timeAgo: "Just now" },
+            ],
+          }
+        : d
+    );
+
+    setAllDiscussions(updated);
+    setReplyText("");
+    alert("Reply posted successfully!");
+  };
+  
+  // Resource state
+const [resources, setResources] = useState<
+  { id: string; title: string; type: string; url: string; date: string }[]
+>([]);
+
+// Upload form states
+const [showUploadForm, setShowUploadForm] = useState(false);
+const [uploadTitle, setUploadTitle] = useState("");
+const [uploadFile, setUploadFile] = useState<File | null>(null);
+
+// Handle upload submit
+const handleUploadSubmit = () => {
+  if (!uploadFile || !uploadTitle.trim()) {
+    alert("Please enter a title and choose a file!");
+    return;
+  }
+
+  const fileType = uploadFile.name.endsWith(".mp4")
+    ? "video"
+    : uploadFile.name.endsWith(".pdf")
+    ? "pdf"
+    : "document";
+
+  const newResource = {
+    id: Date.now().toString(),
+    title: uploadTitle,
+    type: fileType,
+    url: URL.createObjectURL(uploadFile),
+    date: new Date().toLocaleDateString(),
+  };
+
+  setResources((prev) => [newResource, ...prev]);
+  setUploadFile(null);
+  setUploadTitle("");
+  setShowUploadForm(false);
+  alert("Resource uploaded successfully!");
+};
+
+  const renderContent = () => {
+    switch (activeSection) {
+      case "resources" :
+        return (
+    <div className="space-y-6">
+      {/* Header Section */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-foreground">Course Resources</h1>
+        {!showUploadForm ? (
+          <Button
+            className="btn-primary"
+            onClick={() => setShowUploadForm(true)}
+          >
+            Upload Resource
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            onClick={() => setShowUploadForm(false)}
+          >
+            ← Back to Resources
+          </Button>
+        )}
+      </div>
+
+      {/* Upload Form */}
+      {showUploadForm ? (
+        <div className="max-w-xl border rounded-lg p-6 bg-card shadow-sm">
+          <h2 className="text-xl font-semibold mb-4">Upload New Resource</h2>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Title</label>
+              <input
+                type="text"
+                value={uploadTitle}
+                onChange={(e) => setUploadTitle(e.target.value)}
+                placeholder="Enter resource title (e.g. DSA Lecture Notes)"
+                className="w-full border rounded-md px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Select File</label>
+              <input
+                type="file"
+                accept=".pdf,.mp4,.docx,.pptx,.txt"
+                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                className="block w-full text-sm border border-gray-300 rounded-md px-3 py-2"
+              />
+            </div>
+
+            <Button
+              className="btn-primary w-full"
+              onClick={handleUploadSubmit}
+            >
+              Upload Resource
+            </Button>
+          </div>
+        </div>
+      ) : (
+        /* Resource List View */
+        <div>
+          {resources.length === 0 ? (
+            <p className="text-muted-foreground text-center mt-10">
+              No resources uploaded yet. Click "Upload Resource" to add new files.
+            </p>
+          ) : (
+            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {resources.map((res) => (
+                <div
+                  key={res.id}
+                  className="border rounded-xl p-4 bg-card shadow-sm hover:shadow-md transition flex flex-col justify-between"
+                >
+                  <div>
+                    <h3 className="font-semibold text-lg truncate">
+                      {res.title}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {res.type.toUpperCase()} • {res.date}
+                    </p>
+                  </div>
+
+                  <div className="mt-3">
+                    {res.type === "video" ? (
+                      <video
+                        src={res.url}
+                        controls
+                        className="rounded-md w-full mt-2"
+                      />
+                    ) : (
+                      <a
+                        href={res.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 text-sm hover:underline"
+                      >
+                        View / Download Resource
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+      case "discussions" : 
+         return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-foreground">Student Discussions</h1>
+        <p className="text-muted-foreground">
+          View and reply to student queries below.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        {allDiscussions.map((discussion) => (
+          <div
+            key={discussion.id}
+            className="border rounded-lg p-4 shadow-sm bg-card hover:shadow-md transition"
+          >
+            <div
+              onClick={() => handleSelectDiscussion(discussion.id)}
+              className="cursor-pointer"
+            >
+              <div className="flex justify-between items-center">
+                <h2 className="text-lg font-semibold">{discussion.title}</h2>
+                <span
+                  className={`text-sm px-2 py-1 rounded ${
+                    discussion.isResolved
+                      ? "bg-green-100 text-green-800"
+                      : "bg-yellow-100 text-yellow-800"
+                  }`}
+                >
+                  {discussion.tag}
+                </span>
+              </div>
+              <p className="text-muted-foreground mt-1">{discussion.content}</p>
+              <p className="text-xs text-gray-500 mt-2">
+                {discussion.author} • {discussion.timeAgo} • {discussion.replies} replies
+              </p>
+            </div>
+
+            {/* Expanded discussion with replies */}
+            {selectedDiscussion === discussion.id && (
+              <div className="mt-4 border-t pt-4 space-y-3">
+                <div className="space-y-2">
+                  {((discussion as any).repliesList || []).map((r: any, index: number) => (
+                    <div
+                      key={index}
+                      className="bg-muted/40 p-2 rounded-md text-sm text-gray-800"
+                    >
+                      <p className="font-medium">{r.author}</p>
+                      <p>{r.content}</p>
+                      <p className="text-xs text-gray-500">{r.timeAgo}</p>
+                    </div>
+                  ))}
+                  {(!((discussion as any).repliesList) ||
+                    (discussion as any).repliesList.length === 0) && (
+                    <p className="text-sm text-gray-500 italic">
+                      No replies yet.
+                    </p>
+                  )}
+                </div>
+
+                {/* Reply input */}
+                <div className="flex gap-2 mt-3">
+                  <input
+                    type="text"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder="Type your reply..."
+                    className="flex-1 border rounded-md px-3 py-2 text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    className="btn-primary"
+                    onClick={() => handleReplySubmit(discussion.id)}
+                  >
+                    Reply
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+      case "course-plan":
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h1 className="text-3xl font-bold text-foreground">Course Plan</h1>
+              <p className="text-muted-foreground">View the plan uploaded by Admin</p>
+            </div>
+            <div className="space-y-4">
+              {courses.map((c) => (
+                <Card key={c.id}>
+                  <CardHeader>
+                    <CardTitle>{c.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {(coursePlans[c.id] || []).map((p) => (
+                        <div key={p.week} className="p-3 rounded-md border">
+                          <div className="flex items-center justify-between">
+                            <div className="font-medium">Week {p.week}: {p.topic}</div>
+                            <div className="text-xs text-muted-foreground">{p.assessment}</div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">Resources: {p.resources || '--'}</div>
+                        </div>
+                      ))}
+                      {(coursePlans[c.id] || []).length === 0 && (
+                        <p className="text-sm text-muted-foreground">No plan available.</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        );
+
+      case "dashboard":
+        return (
+          <div className="space-y-8">
+            <div className="flex items-center justify-between">
+              <h1 className="text-3xl font-bold text-foreground">Teacher Dashboard</h1>
+              <p className="text-muted-foreground">Manage your courses and students</p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+              {teacherStats.map((stat, index) => {
+                const Icon = stat.icon;
+                
+                return (
+                  <div key={index} className="card-academic p-6 hover:scale-105 transition-transform">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground mb-1">
+                          {stat.title}
+                        </p>
+                        <p className="text-2xl font-bold text-foreground">
+                          {stat.value}
+                        </p>
+                      </div>
+                      <div className={`p-3 rounded-lg ${
+                        stat.color === 'success' ? 'bg-success-light' :
+                        stat.color === 'warning' ? 'bg-warning-light' :
+                        stat.color === 'primary' ? 'bg-primary/10' : 'bg-muted'
+                      }`}>
+                        <Icon className={`h-6 w-6 ${
+                          stat.color === 'success' ? 'text-success' :
+                          stat.color === 'warning' ? 'text-warning' :
+                          stat.color === 'primary' ? 'text-primary' : 'text-muted-foreground'
+                        }`} />
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <span className="text-sm text-muted-foreground">
+                        {stat.change}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-8">
+              <div>
+                <h2 className="text-xl font-semibold mb-6">My Courses</h2>
+                <div className="space-y-4">
+                  {courses.map((course) => (
+                    <div key={course.id} className="card-academic p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="text-lg font-semibold text-foreground mb-2">
+                            {course.name}
+                          </h3>
+                          <div className="flex space-x-4 text-sm text-muted-foreground">
+                            <span className="flex items-center"><Users className="h-4 w-4 mr-1" />{course.students} students</span>
+                            <span className="flex items-center"><FileText className="h-4 w-4 mr-1" />{course.resources} resources</span>
+                          </div>
+                        </div>
+                        <Badge className="status-due">
+                          {course.pendingSubmissions} pending
+                        </Badge> 
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground flex items-center">
+                          <Calendar className="h-4 w-4 mr-1" />
+                          Next: {course.nextClass}
+                        </span>
+                        <Button size="sm" className="btn-success">
+                          Manage Course
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h2 className="text-xl font-semibold mb-6">Quick Actions</h2>
+                <div className="grid grid-cols-2 gap-4">
+                  <Button 
+                    className="h-24 flex-col btn-success"
+                    onClick={() => setActiveSection("upload")}
+                  >
+                    <Upload className="h-6 w-6 mb-2" />
+                    Upload Resource
+                  </Button>
+                  <Button 
+                    className="h-24 flex-col btn-primary"
+                    onClick={() => setActiveSection("create-assignment")}
+                  >
+                    <ClipboardList className="h-6 w-6 mb-2" />
+                    Create Assignment
+                  </Button>
+                  <Button 
+                    className="h-24 flex-col btn-success"
+                    onClick={() => setActiveSection("create-test")}
+                  >
+                    <TestTube className="h-6 w-6 mb-2" />
+                    Create Test
+                  </Button>
+                  <Button 
+                    className="h-24 flex-col btn-primary"
+                    onClick={() => setActiveSection("attendance")}
+                  >
+                    <CheckSquare className="h-6 w-6 mb-2" />
+                    Take Attendance
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+case "attendance" :
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-foreground">Attendance</h1>
+        <input
+          type="date"
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-1 text-sm"
+        />
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full border border-gray-200 rounded-lg">
+          <thead className="bg-muted text-left">
+            <tr>
+              <th className="px-4 py-2 border-b">Roll No</th>
+              <th className="px-4 py-2 border-b">Student Name</th>
+              <th className="px-4 py-2 border-b">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {students.map((student) => (
+              <tr key={student.id} className="hover:bg-muted/40">
+                <td className="px-4 py-2 border-b">{student.roll}</td>
+                <td className="px-4 py-2 border-b">{student.name}</td>
+                <td className="px-4 py-2 border-b">
+                  <select
+                    value={attendance[student.id] || "Absent"}
+                    onChange={(e) =>
+                      handleAttendanceChange(student.id, e.target.value)
+                    }
+                    className="border rounded-md px-2 py-1 text-sm"
+                  >
+                    <option value="Present">Present</option>
+                    <option value="Absent">Absent</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <Button onClick={handleSaveAttendance} className="btn-primary">
+        Save Attendance
+      </Button>
+    </div>
+  );
+case "courses":
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-foreground">My Courses</h1>
+        <Button
+          variant="outline"
+          className="text-sm"
+          onClick={() => setActiveSection("upload")}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add New Course
+        </Button>
+      </div>
+
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {courses.map((course) => (
+          <Card key={course.id} className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">{course.name}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground flex items-center">
+                  <Users className="h-4 w-4 mr-1" /> {course.students} students
+                </span>
+                <Badge variant="secondary">{course.pendingSubmissions} pending</Badge>
+              </div>
+
+              <div className="text-sm text-muted-foreground flex items-center">
+                <FileText className="h-4 w-4 mr-1" /> {course.resources} resources
+              </div>
+
+              <div className="text-sm text-muted-foreground flex items-center">
+                <Calendar className="h-4 w-4 mr-1" />
+                Next Class: {course.nextClass}
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <Button
+                  size="sm"
+                  className="btn-success"
+                  onClick={() => alert(`Manage course: ${course.name}`)}
+                >
+                  Manage
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+
+      case "upload":
+        return (
+          <div className="space-y-6">
+            <h1 className="text-3xl font-bold text-foreground">Upload Resources</h1>
+            <Card>
+              <CardHeader>
+                <CardTitle>Add Learning Material</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="course">Course</Label>
+                    <select className="w-full p-2 border rounded-lg">
+                      <option>Data Structures & Algorithms</option>
+                      <option>Database Management Systems</option>
+                      <option>Computer Networks</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label htmlFor="type">Resource Type</Label>
+                    <select className="w-full p-2 border rounded-lg">
+                      <option>PDF Document</option>
+                      <option>Video Link</option>
+                      <option>Notes</option>
+                      <option>Reference Material</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="title">Title</Label>
+                  <Input id="title" placeholder="Enter resource title" />
+                </div>
+                <div>
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea id="description" placeholder="Describe the resource" />
+                </div>
+                <div>
+                  <Label htmlFor="file">Upload File</Label>
+                  <Input id="file" type="file" />
+                </div>
+                <Button className="btn-success">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Resource
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        );
+
+      case "create-assignment":
+        return (
+          <div className="space-y-6">
+            <h1 className="text-3xl font-bold text-foreground">Create Assignment</h1>
+            <Card>
+              <CardHeader>
+                <CardTitle>New Assignment</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="course">Course</Label>
+                    <select className="w-full p-2 border rounded-lg">
+                      <option>Data Structures & Algorithms</option>
+                      <option>Database Management Systems</option>
+                      <option>Computer Networks</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label htmlFor="marks">Total Marks</Label>
+                    <Input id="marks" type="number" placeholder="100" />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="title">Assignment Title</Label>
+                  <Input id="title" placeholder="Enter assignment title" />
+                </div>
+                <div>
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea id="description" placeholder="Assignment instructions and requirements" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="dueDate">Due Date</Label>
+                    <Input id="dueDate" type="date" />
+                  </div>
+                  <div>
+                    <Label htmlFor="submissionType">Submission Type</Label>
+                    <select className="w-full p-2 border rounded-lg">
+                      <option>File Upload</option>
+                      <option>Text Submission</option>
+                      <option>Link Submission</option>
+                    </select>
+                  </div>
+                </div>
+                <Button className="btn-primary">
+                  <ClipboardList className="h-4 w-4 mr-2" />
+                  Create Assignment
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        );
+
+    case "create-test":
+        return (
+          <div className="space-y-6">
+            <h1 className="text-3xl font-bold text-foreground">Create Test</h1>
+            <Card>
+              <CardHeader>
+                <CardTitle>New Test / Quiz</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Test Details */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Course</Label>
+                    <select className="w-full p-2 border rounded-lg">
+                      <option>Data Structures & Algorithms</option>
+                      <option>Database Management Systems</option>
+                      <option>Computer Networks</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Duration (minutes)</Label>
+                    <Input type="number" placeholder="60" />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Test Title</Label>
+                  <Input placeholder="Enter test title" />
+                </div>
+
+                <div>
+                  <Label>Instructions</Label>
+                  <Textarea placeholder="Test instructions for students" />
+                </div>
+
+                {/* Questions */}
+                <div className="space-y-6">
+                  <Label className="text-lg font-semibold">Questions</Label>
+                  {questions.map((q, index) => (
+                    <div key={index} className="border p-4 rounded-lg bg-muted/30 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-semibold">Question {index + 1}</h3>
+                        {questions.length > 1 && (
+                          <Button variant="destructive" size="sm" onClick={() => removeQuestion(index)}>
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+
+                      <Input
+                        placeholder={`Enter question ${index + 1}`}
+                        value={q.question}
+                        onChange={(e) => handleQuestionChange(index, e.target.value)}
+                      />
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {["A", "B", "C", "D"].map((label, optIndex) => (
+                          <Input
+                            key={optIndex}
+                            placeholder={`Option ${label}`}
+                            value={q.options[optIndex]}
+                            onChange={(e) => handleOptionChange(index, optIndex, e.target.value)}
+                          />
+                        ))}
+                      </div>
+
+                      <div>
+                        <Label>Correct Answer</Label>
+                        <select
+                          className="w-full p-2 border rounded-lg"
+                          value={q.correct}
+                          onChange={(e) => handleCorrectChange(index, e.target.value)}
+                        >
+                          <option value="A">A</option>
+                          <option value="B">B</option>
+                          <option value="C">C</option>
+                          <option value="D">D</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+
+                  <Button variant="outline" size="sm" onClick={addQuestion}>
+                    <Plus className="h-4 w-4 mr-2" />Add Question
+                  </Button>
+                </div>
+
+                <Button className="btn-success">
+                  <TestTube className="h-4 w-4 mr-2" />Create Test
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        );
+
+      default:
+        return (
+          <div className="flex items-center justify-center h-64">
+            <p className="text-muted-foreground">
+              {activeSection.charAt(0).toUpperCase() + activeSection.slice(1)} section coming soon...
+            </p>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <RoleBasedHeader />
+      <div className="flex">
+        <TeacherSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
+        <main className="flex-1 p-8">
+          {renderContent()}
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default TeacherDashboard;
