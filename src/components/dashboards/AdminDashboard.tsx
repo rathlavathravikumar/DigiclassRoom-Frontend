@@ -22,6 +22,9 @@ import {
 import { adminApi } from "@/lib/adminApi";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import AdminCourseList from "@/components/courses/AdminCourseList";
+import AdminCourseForm from "@/components/courses/AdminCourseForm";
+import AdminCourseDetail from "@/components/courses/AdminCourseDetail";
 
 const AdminDashboard = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
@@ -30,10 +33,11 @@ const AdminDashboard = () => {
   const [studentsData, setStudentsData] = useState<any[]>([]);
   const [openAddTeacher, setOpenAddTeacher] = useState(false);
   const [openAddStudent, setOpenAddStudent] = useState(false);
-  const [formTeacher, setFormTeacher] = useState({ name: "", email: "", password: "" });
-  const [formStudent, setFormStudent] = useState({ name: "", email: "", password: "", class_id: "" });
-  const [studentClassError, setStudentClassError] = useState<string>("");
+  const [formTeacher, setFormTeacher] = useState({ name: "", email: "", password: "", clg_id: "" });
+  const [formStudent, setFormStudent] = useState({ name: "", email: "", password: "", clg_id: "" });
   const [submitting, setSubmitting] = useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [editingCourse, setEditingCourse] = useState<any | null>(null);
 
   const displayUsers = ((): any[] => {
     if (userFilter === "teacher") return teachersData.map(t => ({ ...t, role: "teacher" }));
@@ -265,56 +269,16 @@ const AdminDashboard = () => {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-bold text-foreground">Course Management</h1>
-              <Button className="btn-primary" onClick={() => setActiveSection("create-course")}>
+              <Button className="btn-primary" onClick={() => { setEditingCourse(null); setActiveSection("create-course"); }}>
                 <Plus className="h-4 w-4 mr-2" />
                 Create Course
               </Button>
             </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Courses</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {courses.map((c) => (
-                    <div key={c.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold">{c.name}</div>
-                          <div className="text-sm text-muted-foreground">Teacher: {c.teacher} • Students: {c.students}</div>
-                        </div>
-                        <Badge className={c.status === 'Active' ? 'status-present' : 'bg-muted text-muted-foreground'}>
-                          {c.status}
-                        </Badge>
-                      </div>
-                      <div className="mt-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-medium">Course Plan</div>
-                          <Button size="sm" variant="outline">
-                            <Plus className="h-4 w-4 mr-1" /> Add Week
-                          </Button>
-                        </div>
-                        <div className="space-y-2">
-                          {(coursePlans[c.id] || []).map((p) => (
-                            <div key={p.week} className="p-3 rounded-md border">
-                              <div className="flex items-center justify-between">
-                                <div className="font-medium">Week {p.week}: {p.topic}</div>
-                                <div className="text-xs text-muted-foreground">{p.assessment}</div>
-                              </div>
-                              <div className="text-sm text-muted-foreground">Resources: {p.resources || '--'}</div>
-                            </div>
-                          ))}
-                          {(coursePlans[c.id] || []).length === 0 && (
-                            <div className="text-sm text-muted-foreground">No plan added yet.</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <AdminCourseList
+              onView={(id) => { setSelectedCourseId(id); setActiveSection("course-detail"); }}
+              onEdit={(course) => { setEditingCourse(course); setActiveSection("edit-course"); }}
+              onCreate={() => { setEditingCourse(null); setActiveSection("create-course"); }}
+            />
           </div>
         );
 
@@ -396,16 +360,20 @@ const AdminDashboard = () => {
                         <Label htmlFor="tpass">Temporary Password</Label>
                         <Input id="tpass" type="password" value={formTeacher.password} onChange={(e) => setFormTeacher({ ...formTeacher, password: e.target.value })} />
                       </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="tclgid">College ID</Label>
+                        <Input id="tclgid" placeholder="Enter college ID" value={formTeacher.clg_id} onChange={(e) => setFormTeacher({ ...formTeacher, clg_id: e.target.value })} />
+                      </div>
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setOpenAddTeacher(false)}>Cancel</Button>
                       <Button disabled={submitting} onClick={async () => {
                         if (!formTeacher.name || !formTeacher.email || !formTeacher.password) return;
                         setSubmitting(true);
-                        await adminApi.createTeacher(formTeacher);
+                        await adminApi.createTeacher(formTeacher as any);
                         setSubmitting(false);
                         setOpenAddTeacher(false);
-                        setFormTeacher({ name: "", email: "", password: "" });
+                        setFormTeacher({ name: "", email: "", password: "", clg_id: "" });
                         await refreshUsers();
                       }}>Create</Button>
                     </DialogFooter>
@@ -435,30 +403,21 @@ const AdminDashboard = () => {
                         <Label htmlFor="spass">Temporary Password</Label>
                         <Input id="spass" type="password" value={formStudent.password} onChange={(e) => setFormStudent({ ...formStudent, password: e.target.value })} />
                       </div>
+                      {/* Class ID removed */}
                       <div className="grid gap-2">
-                        <Label htmlFor="sclass">Class ID</Label>
-                        <Input id="sclass" placeholder="24-char ObjectId" value={formStudent.class_id} onChange={(e) => {
-                          const v = e.target.value.trim();
-                          setFormStudent({ ...formStudent, class_id: v });
-                          const isValid = /^[a-f\d]{24}$/i.test(v);
-                          setStudentClassError(isValid || v.length === 0 ? "" : "Class ID must be a valid 24-character ObjectId");
-                        }} />
-                        {studentClassError && (
-                          <span className="text-xs text-destructive">{studentClassError}</span>
-                        )}
+                        <Label htmlFor="sclgid">College ID</Label>
+                        <Input id="sclgid" placeholder="Enter college ID" value={formStudent.clg_id} onChange={(e) => setFormStudent({ ...formStudent, clg_id: e.target.value })} />
                       </div>
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setOpenAddStudent(false)}>Cancel</Button>
-                      <Button disabled={submitting || !!studentClassError} onClick={async () => {
-                        if (!formStudent.name || !formStudent.email || !formStudent.password || !formStudent.class_id) return;
-                        if (!/^[a-f\d]{24}$/i.test(formStudent.class_id)) { setStudentClassError("Class ID must be a valid 24-character ObjectId"); return; }
+                      <Button disabled={submitting} onClick={async () => {
+                        if (!formStudent.name || !formStudent.email || !formStudent.password || !formStudent.clg_id) return;
                         setSubmitting(true);
                         await adminApi.createStudent(formStudent as any);
                         setSubmitting(false);
                         setOpenAddStudent(false);
-                        setFormStudent({ name: "", email: "", password: "", class_id: "" });
-                        setStudentClassError("");
+                        setFormStudent({ name: "", email: "", password: "", clg_id: "" });
                         await refreshUsers();
                       }}>Create</Button>
                     </DialogFooter>
@@ -501,9 +460,10 @@ const AdminDashboard = () => {
                               {u.role === 'student' ? 'Student' : 'Teacher'}
                             </Badge>
                           )}
-                          {u.class_id && (
-                            <span className="text-sm text-muted-foreground">Class: {u.class_id}</span>
+                          {u.clg_id && (
+                            <span className="text-sm text-muted-foreground">College ID: {u.clg_id}</span>
                           )}
+                          {/* Class removed */}
                         </div>
                       </div>
                       <div className="flex space-x-2">
@@ -529,66 +489,33 @@ const AdminDashboard = () => {
         return (
           <div className="space-y-6">
             <h1 className="text-3xl font-bold text-foreground">Create New Course</h1>
-            <Card>
-              <CardHeader>
-                <CardTitle>Course Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="courseName">Course Name</Label>
-                    <Input id="courseName" placeholder="e.g., Data Structures & Algorithms" />
-                  </div>
-                  <div>
-                    <Label htmlFor="courseCode">Course Code</Label>
-                    <Input id="courseCode" placeholder="e.g., CSE101" />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="description">Course Description</Label>
-                  <Textarea id="description" placeholder="Brief description of the course" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="teacher">Assign Teacher</Label>
-                    <select className="w-full p-2 border rounded-lg">
-                      <option>Select Teacher</option>
-                      <option>Dr. Sarah Smith</option>
-                      <option>Prof. Johnson</option>
-                      <option>Dr. Brown</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label htmlFor="credits">Credits</Label>
-                    <Input id="credits" type="number" placeholder="3" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="semester">Semester</Label>
-                    <select className="w-full p-2 border rounded-lg">
-                      <option>Semester 1</option>
-                      <option>Semester 2</option>
-                      <option>Semester 3</option>
-                      <option>Semester 4</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label htmlFor="class">Class</Label>
-                    <select className="w-full p-2 border rounded-lg">
-                      <option>E3-S1</option>
-                      <option>E3-S2</option>
-                      <option>E4-S1</option>
-                      <option>E4-S2</option>
-                    </select>
-                  </div>
-                </div>
-                <Button className="w-full">
-                  <BookOpen className="h-4 w-4 mr-2" />
-                  Create Course
-                </Button>
-              </CardContent>
-            </Card>
+            <AdminCourseForm mode="create" onSuccess={() => setActiveSection("courses")} />
+          </div>
+        );
+
+      case "edit-course":
+        return (
+          <div className="space-y-6">
+            <h1 className="text-3xl font-bold text-foreground">Edit Course</h1>
+            <AdminCourseForm mode="edit" initialData={editingCourse} onSuccess={() => setActiveSection("courses")} />
+          </div>
+        );
+
+      case "course-detail":
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h1 className="text-3xl font-bold text-foreground">Course Detail</h1>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setActiveSection("courses")}>Back</Button>
+                <Button onClick={() => setActiveSection("edit-course")}>Edit</Button>
+              </div>
+            </div>
+            {selectedCourseId ? (
+              <AdminCourseDetail id={selectedCourseId} />
+            ) : (
+              <div className="text-sm text-muted-foreground">Select a course from the list.</div>
+            )}
           </div>
         );
 
