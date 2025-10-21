@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import RoleBasedHeader from "@/components/layout/RoleBasedHeader";
 import TeacherSidebar from "@/components/layout/TeacherSidebar";
 import { Button } from "@/components/ui/button";
@@ -17,20 +17,152 @@ import {
   CheckSquare,
   Calendar,
   FileText,
-  TrendingUp
+  TrendingUp,
+  Video
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api";
+import { adminApi } from "@/lib/adminApi";
+import UpcomingMeetings from "@/components/meetings/UpcomingMeetings";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import MeetingForm from "@/components/meetings/MeetingForm";
+import TeacherCoursesList from "@/components/courses/TeacherCoursesList";
+import CourseDetailPage from "@/components/courses/CourseDetailPage";
 
 
 
 const TeacherDashboard = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [questions, setQuestions] = useState([
-    { question: "", options: ["", "", "", ""], correct: "A" },
+    { question: "", options: ["", "", "", ""], correct: "A", marks: 1 },
   ]);
+
+  // Data for Notices / Assignments / Tests
+  const { user } = useAuth();
+  const [notices, setNotices] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
+  const [assignmentDetail, setAssignmentDetail] = useState<any | null>(null);
+  const [marksEdits, setMarksEdits] = useState<Record<string, number>>({});
+  const [tests, setTests] = useState<any[]>([]);
+  const [assignmentMarks, setAssignmentMarks] = useState<any[]>([]);
+  const [assignmentSubmissions, setAssignmentSubmissions] = useState<any[]>([]);
+  const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
+  const [testMarks, setTestMarks] = useState<any[]>([]);
+  // Courses for form selects (rename to avoid collision with mock 'courses')
+  const [teacherCourses, setTeacherCourses] = useState<any[]>([]);
+  // Create Assignment form state
+  const [newAssignment, setNewAssignment] = useState<{ course_id: string; title: string; description: string; due_date: string }>({ course_id: "", title: "", description: "", due_date: "" });
+  // Create Test form state
+  const [newTest, setNewTest] = useState<{ course_id: string; title: string; description: string; scheduled_at: string; duration?: string }>({ course_id: "", title: "", description: "", scheduled_at: "", duration: "" });
+  // Meeting dialog state
+  const [isCreateMeetingDialogOpen, setIsCreateMeetingDialogOpen] = useState(false);
+
+  useEffect(() => {
+    if (activeSection === 'notices') {
+      (async () => {
+        try {
+          const res = await api.listPublicNotices({ target: 'teachers' });
+          const all = await api.listPublicNotices({ target: 'all' });
+          const data = (res as any)?.data || (res as any) || [];
+          const dataAll = (all as any)?.data || (all as any) || [];
+          setNotices([...(data || []), ...(dataAll || [])]);
+        } catch (_) { setNotices([]); }
+      })();
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (activeSection === 'assignment' && user?._id) {
+      (async () => {
+        try {
+          const res = await api.getAssignments({ teacher_id: user._id });
+          const list = (res as any)?.data || (res as any) || [];
+          setAssignments(list);
+        } catch (_) { setAssignments([]); }
+      })();
+    }
+  }, [activeSection, user?._id]);
+
+  // Load courses for selects when landing on assignment/test sections (load all to widen availability)
+  useEffect(() => {
+    if (activeSection === 'assignment' || activeSection === 'test' || activeSection === 'courses' || activeSection === 'dashboard' || activeSection === 'course-plan') {
+      (async () => {
+        try {
+          const res = await api.getCourses();
+          const list = (res as any)?.data || (res as any) || [];
+          setTeacherCourses(list);
+        } catch (_) { setTeacherCourses([]); }
+      })();
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (selectedAssignmentId) {
+      (async () => {
+        try {
+          // fetch assignment meta
+          const res = await api.getAssignment(selectedAssignmentId);
+          const detail = (res as any)?.data || (res as any) || null;
+          setAssignmentDetail(detail);
+          // fetch marks for this assignment to derive student list
+          const marksRes = await api.getMarksByItem('assignment', selectedAssignmentId);
+          const items = (marksRes as any)?.data || (marksRes as any) || [];
+          setAssignmentMarks(items);
+          // fetch submissions for this assignment
+          const subsRes = await api.getSubmissionsByItem('assignment', selectedAssignmentId);
+          const subs = (subsRes as any)?.data || (subsRes as any) || [];
+          setAssignmentSubmissions(subs);
+          const m: Record<string, number> = {};
+          (items || []).forEach((it: any) => {
+            const sid = it.student_id?._id || it.student_id?.id || it.student_id;
+            if (typeof it?.score === 'number') m[sid] = it.score;
+          });
+          setMarksEdits(m);
+        } catch (_) {
+          setAssignmentDetail(null);
+          setAssignmentMarks([]);
+          setAssignmentSubmissions([]);
+        }
+      })();
+    } else {
+      setAssignmentDetail(null);
+      setAssignmentMarks([]);
+      setAssignmentSubmissions([]);
+      setMarksEdits({});
+    }
+  }, [selectedAssignmentId]);
+
+  useEffect(() => {
+    if (activeSection === 'test') {
+      (async () => {
+        try {
+          const res = await api.getTests();
+          const list = (res as any)?.data || (res as any) || [];
+          setTests(list);
+        } catch (_) { setTests([]); }
+      })();
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (selectedTestId) {
+      (async () => {
+        try {
+          const marksRes = await api.getMarksByItem('test', selectedTestId);
+          const items = (marksRes as any)?.data || (marksRes as any) || [];
+          setTestMarks(items);
+        } catch (_) { setTestMarks([]); }
+      })();
+    } else {
+      setTestMarks([]);
+    }
+  }, [selectedTestId]);
 
   // ✅ Handlers for create-test
   const addQuestion = () => {
-    setQuestions([...questions, { question: "", options: ["", "", "", ""], correct: "A" }]);
+    setQuestions([...questions, { question: "", options: ["", "", "", ""], correct: "A", marks: 1 }]);
   };
 
   const handleQuestionChange = (index, value) => {
@@ -51,11 +183,20 @@ const TeacherDashboard = () => {
     setQuestions(updated);
   };
 
+  const handleMarksChange = (index, value) => {
+    const updated = [...questions];
+    updated[index].marks = Number(value) || 0;
+    setQuestions(updated);
+  };
+
   const removeQuestion = (index) => {
     const updated = [...questions];
     updated.splice(index, 1);
     setQuestions(updated);
   };
+
+  // Calculate total marks from all questions
+  const totalMarks = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
 
   const teacherStats = [
     {
@@ -87,48 +228,7 @@ const TeacherDashboard = () => {
       color: "success"
     }
   ];
-  // Mock course plans (mirrors Admin)
-  const coursePlans: Record<string, { week: number; topic: string; resources?: string; assessment?: string }[]> = {
-    "1": [
-      { week: 1, topic: "Algorithm Analysis & Big-O", resources: "Slides, Book Ch.1", assessment: "Quiz" },
-      { week: 2, topic: "Stacks & Queues", resources: "Lab sheet", assessment: "Assignment 1" },
-    ],
-    "2": [
-      { week: 1, topic: "Relational Model & Keys", resources: "Slides", assessment: "Quiz" },
-      { week: 2, topic: "SQL Basics", resources: "Practice sheet", assessment: "Assignment 1" },
-    ],
-    "3": [
-      { week: 1, topic: "OSI Model", resources: "Slides", assessment: "Quiz" },
-      { week: 2, topic: "Transport Layer", resources: "Book Ch.3", assessment: "Assignment 1" },
-    ],
-  };
 
-  const courses = [
-    {
-      id: "1",
-      name: "Data Structures & Algorithms",
-      students: 45,
-      pendingSubmissions: 12,
-      nextClass: "Mon 10:00 AM",
-      resources: 15
-    },
-    {
-      id: "2", 
-      name: "Database Management Systems",
-      students: 50,
-      pendingSubmissions: 8,
-      nextClass: "Tue 2:00 PM", 
-      resources: 12
-    },
-    {
-      id: "3",
-      name: "Computer Networks",
-      students: 50,
-      pendingSubmissions: 8,
-      nextClass: "Wed 11:00 AM",
-      resources: 18
-    }
-  ];
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
@@ -216,6 +316,10 @@ const [resources, setResources] = useState<
 const [showUploadForm, setShowUploadForm] = useState(false);
 const [uploadTitle, setUploadTitle] = useState("");
 const [uploadFile, setUploadFile] = useState<File | null>(null);
+const [courseResourceTitle, setCourseResourceTitle] = useState("");
+const [courseResourceDescription, setCourseResourceDescription] = useState("");
+const [courseResourceFile, setCourseResourceFile] = useState<File | null>(null);
+const [selectedCourseForUpload, setSelectedCourseForUpload] = useState<string>("");
 
 // Handle upload submit
 const handleUploadSubmit = () => {
@@ -243,6 +347,36 @@ const handleUploadSubmit = () => {
   setUploadTitle("");
   setShowUploadForm(false);
   alert("Resource uploaded successfully!");
+};
+
+// Handle course resource upload
+const handleCourseResourceUpload = async () => {
+  if (!courseResourceFile || !courseResourceTitle.trim()) {
+    alert("Please enter a title and choose a file!");
+    return;
+  }
+
+  if (!selectedCourseForUpload) {
+    alert("Please select a course!");
+    return;
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append("file", courseResourceFile);
+    formData.append("title", courseResourceTitle);
+    formData.append("description", courseResourceDescription);
+
+    await api.uploadCourseResource(selectedCourseForUpload, formData);
+    
+    setCourseResourceFile(null);
+    setCourseResourceTitle("");
+    setCourseResourceDescription("");
+    setSelectedCourseForUpload("");
+    alert("Resource uploaded successfully!");
+  } catch (err: any) {
+    alert(`Upload failed: ${err.message || "Unknown error"}`);
+  }
 };
 
   const renderContent = () => {
@@ -292,8 +426,7 @@ const handleUploadSubmit = () => {
               <input
                 type="file"
                 accept=".pdf,.mp4,.docx,.pptx,.txt"
-                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                className="block w-full text-sm border border-gray-300 rounded-md px-3 py-2"
+                onChange={(e) => setUploadFile(e.target.files[0])}
               />
             </div>
 
@@ -306,49 +439,44 @@ const handleUploadSubmit = () => {
           </div>
         </div>
       ) : (
-        /* Resource List View */
-        <div>
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
           {resources.length === 0 ? (
-            <p className="text-muted-foreground text-center mt-10">
-              No resources uploaded yet. Click "Upload Resource" to add new files.
-            </p>
+            <p className="text-muted-foreground text-center col-span-full">No resources uploaded yet. Click "Upload Resource" to add new files.</p>
           ) : (
-            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {resources.map((res) => (
-                <div
-                  key={res.id}
-                  className="border rounded-xl p-4 bg-card shadow-sm hover:shadow-md transition flex flex-col justify-between"
-                >
-                  <div>
-                    <h3 className="font-semibold text-lg truncate">
-                      {res.title}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {res.type.toUpperCase()} • {res.date}
-                    </p>
-                  </div>
-
-                  <div className="mt-3">
-                    {res.type === "video" ? (
-                      <video
-                        src={res.url}
-                        controls
-                        className="rounded-md w-full mt-2"
-                      />
-                    ) : (
-                      <a
-                        href={res.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 text-sm hover:underline"
-                      >
-                        View / Download Resource
-                      </a>
-                    )}
-                  </div>
+            resources.map((res) => (
+              <div
+                key={res.id}
+                className="border rounded-xl p-4 bg-card shadow-sm hover:shadow-md transition flex flex-col justify-between"
+              >
+                <div>
+                  <h3 className="font-semibold text-lg truncate">
+                    {res.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {res.type.toUpperCase()} • {res.date}
+                  </p>
                 </div>
-              ))}
-            </div>
+
+                <div className="mt-3">
+                  {res.type === "video" ? (
+                    <video
+                      src={res.url}
+                      controls
+                      className="rounded-md w-full mt-2"
+                    />
+                  ) : (
+                    <a
+                      href={res.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 text-sm hover:underline"
+                    >
+                      View / Download Resource
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))
           )}
         </div>
       )}
@@ -448,29 +576,34 @@ const handleUploadSubmit = () => {
               <p className="text-muted-foreground">View the plan uploaded by Admin</p>
             </div>
             <div className="space-y-4">
-              {courses.map((c) => (
-                <Card key={c.id}>
-                  <CardHeader>
-                    <CardTitle>{c.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {(coursePlans[c.id] || []).map((p) => (
-                        <div key={p.week} className="p-3 rounded-md border">
-                          <div className="flex items-center justify-between">
-                            <div className="font-medium">Week {p.week}: {p.topic}</div>
-                            <div className="text-xs text-muted-foreground">{p.assessment}</div>
-                          </div>
-                          <div className="text-sm text-muted-foreground">Resources: {p.resources || '--'}</div>
-                        </div>
-                      ))}
-                      {(coursePlans[c.id] || []).length === 0 && (
-                        <p className="text-sm text-muted-foreground">No plan available.</p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+              {teacherCourses.length > 0 ? (
+                teacherCourses.map((c: any) => (
+                  <Card key={c._id || c.id}>
+                    <CardHeader>
+                      <CardTitle>{c.name || c.title}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {(c.syllabus || []).length > 0 ? (
+                          (c.syllabus || []).map((week: any, index: number) => (
+                            <div key={index} className="p-3 rounded-md border">
+                              <div className="flex items-center justify-between">
+                                <div className="font-medium">{week.topic || `Week ${index + 1}`}</div>
+                                <div className="text-xs text-muted-foreground">{week.assessment || '--'}</div>
+                              </div>
+                              <div className="text-sm text-muted-foreground">Resources: {week.resources || '--'}</div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No plan available.</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <p className="text-muted-foreground">No courses available yet.</p>
+              )}
             </div>
           </div>
         );
@@ -520,38 +653,60 @@ const handleUploadSubmit = () => {
               })}
             </div>
 
-            <div className="grid lg:grid-cols-2 gap-8">
+            <div className="grid lg:grid-cols-3 gap-8">
               <div>
                 <h2 className="text-xl font-semibold mb-6">My Courses</h2>
                 <div className="space-y-4">
-                  {courses.map((course) => (
-                    <div key={course.id} className="card-academic p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <h3 className="text-lg font-semibold text-foreground mb-2">
-                            {course.name}
-                          </h3>
-                          <div className="flex space-x-4 text-sm text-muted-foreground">
-                            <span className="flex items-center"><Users className="h-4 w-4 mr-1" />{course.students} students</span>
-                            <span className="flex items-center"><FileText className="h-4 w-4 mr-1" />{course.resources} resources</span>
+                  {teacherCourses.length > 0 ? (
+                    teacherCourses.map((course: any) => (
+                      <div key={course._id || course.id} className="card-academic p-6">
+                        <div className="flex items-start justify-between mb-4">
+                          <div>
+                            <h3 className="text-lg font-semibold text-foreground mb-2">
+                              {course.name || course.title}
+                            </h3>
+                            <div className="flex space-x-4 text-sm text-muted-foreground">
+                              <span className="flex items-center"><Users className="h-4 w-4 mr-1" />{course.students_count || course.studentCount || 0} students</span>
+                              <span className="flex items-center"><TestTube className="h-4 w-4 mr-1" />{course.tests_count || 0} tests</span>
+                              <span className="flex items-center"><FileText className="h-4 w-4 mr-1" />{course.resourceCount || 0} resources</span>
+                            </div>
                           </div>
+                          <Badge className="status-due">
+                            {course.pendingSubmissions || 0} pending
+                          </Badge> 
                         </div>
-                        <Badge className="status-due">
-                          {course.pendingSubmissions} pending
-                        </Badge> 
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground flex items-center">
+                            <Calendar className="h-4 w-4 mr-1" />
+                            {course.schedule || 'No schedule'}
+                          </span>
+                          <Button 
+                            size="sm" 
+                            className="btn-success"
+                            onClick={() => {
+                              setSelectedCourseId(course._id || course.id);
+                              setActiveSection('courses');
+                            }}
+                          >
+                            View
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground flex items-center">
-                          <Calendar className="h-4 w-4 mr-1" />
-                          Next: {course.nextClass}
-                        </span>
-                        <Button size="sm" className="btn-success">
-                          Manage Course
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <p className="text-muted-foreground">No courses available yet.</p>
+                  )}
                 </div>
+              </div>
+
+              <div>
+                <UpcomingMeetings 
+                  userRole="teacher"
+                  limit={5}
+                  showCreateButton={true}
+                  onCreateMeeting={() => setIsCreateMeetingDialogOpen(true)}
+                  onViewAll={() => setActiveSection("meetings")}
+                />
               </div>
 
               <div>
@@ -566,24 +721,24 @@ const handleUploadSubmit = () => {
                   </Button>
                   <Button 
                     className="h-24 flex-col btn-primary"
-                    onClick={() => setActiveSection("create-assignment")}
+                    onClick={() => setActiveSection("assignment")}
                   >
                     <ClipboardList className="h-6 w-6 mb-2" />
-                    Create Assignment
+                    Assignment
                   </Button>
                   <Button 
                     className="h-24 flex-col btn-success"
-                    onClick={() => setActiveSection("create-test")}
+                    onClick={() => setActiveSection("test")}
                   >
                     <TestTube className="h-6 w-6 mb-2" />
-                    Create Test
+                    Test
                   </Button>
                   <Button 
                     className="h-24 flex-col btn-primary"
-                    onClick={() => setActiveSection("attendance")}
+                    onClick={() => setActiveSection("meetings")}
                   >
-                    <CheckSquare className="h-6 w-6 mb-2" />
-                    Take Attendance
+                    <Video className="h-6 w-6 mb-2" />
+                    Meetings
                   </Button>
                 </div>
               </div>
@@ -641,61 +796,7 @@ case "attendance" :
       </Button>
     </div>
   );
-case "courses":
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-foreground">My Courses</h1>
-        <Button
-          variant="outline"
-          className="text-sm"
-          onClick={() => setActiveSection("upload")}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add New Course
-        </Button>
-      </div>
-
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {courses.map((course) => (
-          <Card key={course.id} className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">{course.name}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground flex items-center">
-                  <Users className="h-4 w-4 mr-1" /> {course.students} students
-                </span>
-                <Badge variant="secondary">{course.pendingSubmissions} pending</Badge>
-              </div>
-
-              <div className="text-sm text-muted-foreground flex items-center">
-                <FileText className="h-4 w-4 mr-1" /> {course.resources} resources
-              </div>
-
-              <div className="text-sm text-muted-foreground flex items-center">
-                <Calendar className="h-4 w-4 mr-1" />
-                Next Class: {course.nextClass}
-              </div>
-
-              <div className="pt-2 flex justify-end">
-                <Button
-                  size="sm"
-                  className="btn-success"
-                  onClick={() => alert(`Manage course: ${course.name}`)}
-                >
-                  Manage
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-
-      case "upload":
+case "upload":
         return (
           <div className="space-y-6">
             <h1 className="text-3xl font-bold text-foreground">Upload Resources</h1>
@@ -707,35 +808,51 @@ case "courses":
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="course">Course</Label>
-                    <select className="w-full p-2 border rounded-lg">
-                      <option>Data Structures & Algorithms</option>
-                      <option>Database Management Systems</option>
-                      <option>Computer Networks</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label htmlFor="type">Resource Type</Label>
-                    <select className="w-full p-2 border rounded-lg">
-                      <option>PDF Document</option>
-                      <option>Video Link</option>
-                      <option>Notes</option>
-                      <option>Reference Material</option>
+                    <select 
+                      className="w-full p-2 border rounded-lg"
+                      value={selectedCourseForUpload}
+                      onChange={(e) => setSelectedCourseForUpload(e.target.value)}
+                    >
+                      <option value="">Select a course...</option>
+                      {teacherCourses.length > 0 ? (
+                        teacherCourses.map((course: any) => (
+                          <option key={course._id || course.id} value={course._id || course.id}>
+                            {course.name || course.title}
+                          </option>
+                        ))
+                      ) : (
+                        <option disabled>No courses available</option>
+                      )}
                     </select>
                   </div>
                 </div>
                 <div>
                   <Label htmlFor="title">Title</Label>
-                  <Input id="title" placeholder="Enter resource title" />
+                  <Input 
+                    id="title" 
+                    placeholder="Enter resource title"
+                    value={courseResourceTitle}
+                    onChange={(e) => setCourseResourceTitle(e.target.value)}
+                  />
                 </div>
                 <div>
                   <Label htmlFor="description">Description</Label>
-                  <Textarea id="description" placeholder="Describe the resource" />
+                  <Textarea 
+                    id="description" 
+                    placeholder="Describe the resource"
+                    value={courseResourceDescription}
+                    onChange={(e) => setCourseResourceDescription(e.target.value)}
+                  />
                 </div>
                 <div>
                   <Label htmlFor="file">Upload File</Label>
-                  <Input id="file" type="file" />
+                  <Input 
+                    id="file" 
+                    type="file" 
+                    onChange={(e) => setCourseResourceFile(e.target.files?.[0] || null)}
+                  />
                 </div>
-                <Button className="btn-success">
+                <Button className="btn-success" onClick={handleCourseResourceUpload}>
                   <Upload className="h-4 w-4 mr-2" />
                   Upload Resource
                 </Button>
@@ -744,10 +861,125 @@ case "courses":
           </div>
         );
 
-      case "create-assignment":
+      case "notices":
         return (
           <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-foreground">Create Assignment</h1>
+            <h1 className="text-3xl font-bold text-foreground">Notices</h1>
+            <Card>
+              <CardHeader>
+                <CardTitle>Admin Notices</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(notices || []).map((n: any) => (
+                  <div key={n._id || (n.title + n.createdAt)} className="p-4 border rounded-md">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-semibold">{n.title}</div>
+                        <div className="text-xs text-muted-foreground">{(n.priority || '').toUpperCase()} • {n.target}</div>
+                      </div>
+                      <div className="text-xs text-muted-foreground text-right">
+                        <div>Created: {n.createdAt ? new Date(n.createdAt).toLocaleString() : '-'}</div>
+                        <div>Updated: {n.updatedAt ? new Date(n.updatedAt).toLocaleString() : '-'}</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-sm">{n.content}</div>
+                  </div>
+                ))}
+                {(notices || []).length === 0 && (
+                  <div className="text-sm text-muted-foreground">No notices.</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        );
+
+      case "assignment":
+        return (
+          <div className="space-y-6">
+            <h1 className="text-3xl font-bold text-foreground">Assignments</h1>
+            <Card>
+              <CardHeader>
+                <CardTitle>My Assignments</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(assignments || []).map((a: any) => (
+                  <div key={a._id || a.id} className="p-3 border rounded-md flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{a.title || a.name || 'Assignment'}</div>
+                      <div className="text-xs text-muted-foreground">Total Marks: {a.total_marks ?? a.total ?? '--'}</div>
+                    </div>
+                    <Button size="sm" onClick={() => setSelectedAssignmentId(a._id || a.id)}>View Submissions</Button>
+                  </div>
+                ))}
+                {(assignments || []).length === 0 && (
+                  <div className="text-sm text-muted-foreground">No assignments found.</div>
+                )}
+              </CardContent>
+            </Card>
+            {assignmentDetail && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Submissions: {assignmentDetail?.title || assignmentDetail?.name || 'Assignment'}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {(assignmentSubmissions || []).map((s: any) => {
+                    const sid = s.student_id?._id || s.student_id?.id || s.student_id;
+                    const scoreVal = marksEdits[sid] ?? '';
+                    return (
+                      <div key={s._id || sid} className="p-3 border rounded-md flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{s.student_id?.name || 'Student'}</div>
+                          {s?.file_url && (
+                            <a className="text-xs text-blue-600 hover:underline" href={s.file_url} target="_blank" rel="noreferrer">View submission</a>
+                          )}
+                          {s?.link && (
+                            <a className="block text-xs text-blue-600 hover:underline" href={s.link} target="_blank" rel="noreferrer">External link</a>
+                          )}
+                          {s?.text && (
+                            <div className="text-xs text-muted-foreground truncate">{s.text}</div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            className="w-24"
+                            value={scoreVal}
+                            onChange={(e) => setMarksEdits({ ...marksEdits, [sid]: Number(e.target.value) })}
+                            placeholder="Marks"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                const maxScore = (assignmentDetail?.totalMarks as number) || 100;
+                                const scoreValNum = Number(marksEdits[sid]);
+                                if (!Number.isFinite(scoreValNum)) { alert('Enter a valid score'); return; }
+                                await api.upsertMarks({
+                                  type: 'assignment',
+                                  ref_id: selectedAssignmentId!,
+                                  student_id: sid,
+                                  score: scoreValNum,
+                                  max_score: maxScore,
+                                  remarks: '',
+                                  course_id: assignmentDetail?.course_id || undefined,
+                                });
+                                alert('Marks saved');
+                              } catch (e) { alert('Failed to save marks'); }
+                            }}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {(assignmentSubmissions || []).length === 0 && (
+                    <div className="text-sm text-muted-foreground">No submissions yet.</div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
             <Card>
               <CardHeader>
                 <CardTitle>New Assignment</CardTitle>
@@ -756,10 +988,15 @@ case "courses":
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="course">Course</Label>
-                    <select className="w-full p-2 border rounded-lg">
-                      <option>Data Structures & Algorithms</option>
-                      <option>Database Management Systems</option>
-                      <option>Computer Networks</option>
+                    <select
+                      className="w-full p-2 border rounded-lg"
+                      value={newAssignment.course_id}
+                      onChange={(e) => setNewAssignment({ ...newAssignment, course_id: e.target.value })}
+                    >
+                      <option value="">Select course</option>
+                      {teacherCourses.map((c: any) => (
+                        <option key={c._id || c.id} value={c._id || c.id}>{c.name || c.title}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -769,16 +1006,16 @@ case "courses":
                 </div>
                 <div>
                   <Label htmlFor="title">Assignment Title</Label>
-                  <Input id="title" placeholder="Enter assignment title" />
+                  <Input id="title" placeholder="Enter assignment title" value={newAssignment.title} onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })} />
                 </div>
                 <div>
                   <Label htmlFor="description">Description</Label>
-                  <Textarea id="description" placeholder="Assignment instructions and requirements" />
+                  <Textarea id="description" placeholder="Assignment instructions and requirements" value={newAssignment.description} onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="dueDate">Due Date</Label>
-                    <Input id="dueDate" type="date" />
+                    <Input id="dueDate" type="date" value={newAssignment.due_date} onChange={(e) => setNewAssignment({ ...newAssignment, due_date: e.target.value })} />
                   </div>
                   <div>
                     <Label htmlFor="submissionType">Submission Type</Label>
@@ -789,7 +1026,27 @@ case "courses":
                     </select>
                   </div>
                 </div>
-                <Button className="btn-primary">
+                <Button className="btn-primary" onClick={async () => {
+                  if (!newAssignment.title || !newAssignment.due_date || !newAssignment.course_id) { alert('Please fill course, title and due date'); return; }
+                  try {
+                    await api.createAssignment({
+                      title: newAssignment.title,
+                      description: newAssignment.description,
+                      due_date: newAssignment.due_date,
+                      course_id: newAssignment.course_id,
+                    });
+                    setNewAssignment({ course_id: '', title: '', description: '', due_date: '' });
+                    // refresh list
+                    if (user?._id) {
+                      const res = await api.getAssignments({ teacher_id: user._id });
+                      const list = (res as any)?.data || (res as any) || [];
+                      setAssignments(list);
+                    }
+                    alert('Assignment created');
+                  } catch (e) {
+                    alert('Failed to create assignment');
+                  }
+                }}>
                   <ClipboardList className="h-4 w-4 mr-2" />
                   Create Assignment
                 </Button>
@@ -798,10 +1055,58 @@ case "courses":
           </div>
         );
 
-    case "create-test":
+    case "test":
         return (
           <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-foreground">Create Test</h1>
+            <h1 className="text-3xl font-bold text-foreground">Tests</h1>
+            <Card>
+              <CardHeader>
+                <CardTitle>My Tests</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(tests || []).map((t: any) => (
+                  <div key={t._id || t.id} className="p-3 border rounded-md flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{t.title || t.name || 'Test'}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Duration: {t.duration_minutes ?? '--'} min • Total Marks: {t.total_marks ?? 0}
+                      </div>
+                    </div>
+                    <Button size="sm" onClick={() => setSelectedTestId(t._id || t.id)}>View Scores</Button>
+                  </div>
+                ))}
+                {(tests || []).length === 0 && (
+                  <div className="text-sm text-muted-foreground">No tests found.</div>
+                )}
+              </CardContent>
+            </Card>
+            {selectedTestId && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Scores</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {(testMarks || []).map((it: any) => (
+                    <div key={it._id} className="p-3 border rounded-md flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{it.student_id?.name || 'Student'}</div>
+                        <div className="text-xs text-muted-foreground">{it.student_id?.email || ''}</div>
+                        {it.remarks && <div className="text-xs text-muted-foreground">{it.remarks}</div>}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-bold">{it.score ?? 0} / {it.max_score ?? 0}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {it.max_score > 0 ? Math.round((it.score / it.max_score) * 100) : 0}%
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {(testMarks || []).length === 0 && (
+                    <div className="text-sm text-muted-foreground">No scores found.</div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
             <Card>
               <CardHeader>
                 <CardTitle>New Test / Quiz</CardTitle>
@@ -811,26 +1116,32 @@ case "courses":
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Course</Label>
-                    <select className="w-full p-2 border rounded-lg">
-                      <option>Data Structures & Algorithms</option>
-                      <option>Database Management Systems</option>
-                      <option>Computer Networks</option>
+                    <select className="w-full p-2 border rounded-lg" value={newTest.course_id} onChange={(e) => setNewTest({ ...newTest, course_id: e.target.value })}>
+                      <option value="">Select course</option>
+                      {teacherCourses.map((c: any) => (
+                        <option key={c._id || c.id} value={c._id || c.id}>{c.name || c.title}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
                     <Label>Duration (minutes)</Label>
-                    <Input type="number" placeholder="60" />
+                    <Input type="number" placeholder="60" value={newTest.duration} onChange={(e) => setNewTest({ ...newTest, duration: e.target.value })} />
                   </div>
                 </div>
 
                 <div>
+                  <Label>Schedule (date & time)</Label>
+                  <Input type="datetime-local" value={newTest.scheduled_at} onChange={(e) => setNewTest({ ...newTest, scheduled_at: e.target.value })} />
+                </div>
+
+                <div>
                   <Label>Test Title</Label>
-                  <Input placeholder="Enter test title" />
+                  <Input placeholder="Enter test title" value={newTest.title} onChange={(e) => setNewTest({ ...newTest, title: e.target.value })} />
                 </div>
 
                 <div>
                   <Label>Instructions</Label>
-                  <Textarea placeholder="Test instructions for students" />
+                  <Textarea placeholder="Test instructions for students" value={newTest.description} onChange={(e) => setNewTest({ ...newTest, description: e.target.value })} />
                 </div>
 
                 {/* Questions */}
@@ -864,18 +1175,31 @@ case "courses":
                         ))}
                       </div>
 
-                      <div>
-                        <Label>Correct Answer</Label>
-                        <select
-                          className="w-full p-2 border rounded-lg"
-                          value={q.correct}
-                          onChange={(e) => handleCorrectChange(index, e.target.value)}
-                        >
-                          <option value="A">A</option>
-                          <option value="B">B</option>
-                          <option value="C">C</option>
-                          <option value="D">D</option>
-                        </select>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Correct Answer</Label>
+                          <select
+                            className="w-full p-2 border rounded-lg"
+                            value={q.correct}
+                            onChange={(e) => handleCorrectChange(index, e.target.value)}
+                          >
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="D">D</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Label>Marks</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            placeholder="1"
+                            value={q.marks || 1}
+                            onChange={(e) => handleMarksChange(index, e.target.value)}
+                          />
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -883,13 +1207,99 @@ case "courses":
                   <Button variant="outline" size="sm" onClick={addQuestion}>
                     <Plus className="h-4 w-4 mr-2" />Add Question
                   </Button>
+                  
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">Total Marks:</span>
+                      <span className="text-2xl font-bold text-primary">{totalMarks}</span>
+                    </div>
+                  </div>
                 </div>
 
-                <Button className="btn-success">
+                <Button
+                  className="btn-success"
+                  onClick={async () => {
+                    try {
+                      if (!newTest.course_id || !newTest.title || !newTest.scheduled_at) {
+                        alert('Please select a course, enter a title, and set schedule');
+                        return;
+                      }
+                      const iso = new Date(newTest.scheduled_at).toISOString();
+                      await api.createTest({
+                        title: newTest.title,
+                        description: newTest.description || '',
+                        scheduled_at: iso,
+                        course_id: newTest.course_id,
+                        // pass duration and questions so student can take the test
+                        // @ts-ignore - backend accepts extra fields
+                        duration_minutes: Number(newTest.duration) || 60,
+                        // use existing questions state (expects question, options[4], correct, marks)
+                        // @ts-ignore - backend accepts this array
+                        questions: questions.map((q: any) => ({ 
+                          question: q.question, 
+                          options: q.options, 
+                          correct: q.correct, 
+                          marks: q.marks || 1 
+                        })),
+                      } as any);
+                      // refresh tests list
+                      const res = await api.getTests();
+                      const list = (res as any)?.data || (res as any) || [];
+                      setTests(list);
+                      // reset form
+                      setNewTest({ course_id: '', title: '', description: '', scheduled_at: '', duration: '' });
+                      setQuestions([{ question: "", options: ["", "", "", ""], correct: "A", marks: 1 }]);
+                      alert('Test created');
+                    } catch (e) {
+                      alert('Failed to create test');
+                    }
+                  }}
+                >
                   <TestTube className="h-4 w-4 mr-2" />Create Test
                 </Button>
               </CardContent>
             </Card>
+          </div>
+        );
+
+      case "courses":
+        if (selectedCourseId) {
+          return (
+            <div>
+              <Button 
+                variant="ghost" 
+                onClick={() => setSelectedCourseId(null)}
+                className="mb-4"
+              >
+                ← Back to Courses
+              </Button>
+              <CourseDetailPage courseId={selectedCourseId} />
+            </div>
+          );
+        }
+        return <TeacherCoursesList onCourseSelect={setSelectedCourseId} />;
+
+      case "meetings":
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h1 className="text-3xl font-bold text-foreground">Meetings</h1>
+              <Button onClick={() => setIsCreateMeetingDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Schedule Meeting
+              </Button>
+            </div>
+            <div className="text-center py-12">
+              <Video className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Meetings Feature</h3>
+              <p className="text-muted-foreground mb-4">
+                Schedule and manage online meetings for your courses.
+              </p>
+              <Button onClick={() => setIsCreateMeetingDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Schedule Your First Meeting
+              </Button>
+            </div>
           </div>
         );
 
@@ -913,6 +1323,22 @@ case "courses":
           {renderContent()}
         </main>
       </div>
+
+      {/* Meeting Creation Dialog */}
+      <Dialog open={isCreateMeetingDialogOpen} onOpenChange={setIsCreateMeetingDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Schedule New Meeting</DialogTitle>
+            <DialogDescription>
+              Create a new online meeting for your course. Students will be able to join when the meeting starts.
+            </DialogDescription>
+          </DialogHeader>
+          <MeetingForm 
+            onSuccess={() => setIsCreateMeetingDialogOpen(false)}
+            onCancel={() => setIsCreateMeetingDialogOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

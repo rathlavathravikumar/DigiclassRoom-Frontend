@@ -10,6 +10,7 @@ import Home from "@/pages/Home";
 import LoginForm from "@/components/auth/LoginForm";
 import RootLayout from "@/components/layout/RootLayout";
 import SignupForm from "@/components/auth/SignupForm";
+import CourseDetailPageWrapper from "@/pages/CourseDetailPage";
 
 const queryClient = new QueryClient();
 
@@ -19,13 +20,14 @@ const App = () => (
       <AuthProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             <Route element={<RootLayout />}>
               <Route index element={<Home />} />
               <Route path="login" element={<LoginForm />} />
               <Route path="signup" element={<SignupForm />} />
               <Route path="app" element={<RoleBasedLayout />} />
+              <Route path="courses/:courseId" element={<CourseDetailPageWrapper />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Route>

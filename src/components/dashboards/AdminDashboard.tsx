@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import AdminCourseList from "@/components/courses/AdminCourseList";
 import AdminCourseForm from "@/components/courses/AdminCourseForm";
 import AdminCourseDetail from "@/components/courses/AdminCourseDetail";
+import { toast } from "sonner";
 
 const AdminDashboard = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
@@ -38,6 +39,11 @@ const AdminDashboard = () => {
   const [submitting, setSubmitting] = useState(false);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [editingCourse, setEditingCourse] = useState<any | null>(null);
+  // Notices state
+  const [notices, setNotices] = useState<any[]>([]);
+  const [noticeFilter, setNoticeFilter] = useState<'all' | 'students' | 'teachers'>('all');
+  const [openCreateNotice, setOpenCreateNotice] = useState(false);
+  const [noticeForm, setNoticeForm] = useState<{ title: string; content: string; priority: 'normal' | 'important' | 'urgent'; target: 'all' | 'students' | 'teachers' }>({ title: '', content: '', priority: 'normal', target: 'all' });
 
   const displayUsers = ((): any[] => {
     if (userFilter === "teacher") return teachersData.map(t => ({ ...t, role: "teacher" }));
@@ -72,6 +78,18 @@ const AdminDashboard = () => {
       refreshUsers();
     }
   }, [activeSection]);
+
+  useEffect(() => {
+    const loadNotices = async () => {
+      try {
+        const res = await adminApi.listNotices(noticeFilter !== 'all' ? { target: noticeFilter } as any : undefined);
+        setNotices((res as any)?.data || (res as any) || []);
+      } catch (_) {
+        // noop
+      }
+    };
+    if (activeSection === 'notices') loadNotices();
+  }, [activeSection, noticeFilter]);
 
   useEffect(() => {
     if (activeSection === "users") {
@@ -139,16 +157,51 @@ const AdminDashboard = () => {
     ],
   };
 
-  // Mock timetable data
+  // Timetable data
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
   const periods = ["9:00", "10:00", "11:00", "1:00", "2:00"];
-  const timetable: Record<string, Record<string, string>> = {
+  const initialTimetable: Record<string, Record<string, string>> = {
     Mon: { "9:00": "DSA", "10:00": "DBMS", "11:00": "CN", "1:00": "--", "2:00": "--" },
     Tue: { "9:00": "DBMS", "10:00": "CN", "11:00": "--", "1:00": "DSA", "2:00": "--" },
     Wed: { "9:00": "CN", "10:00": "--", "11:00": "DSA", "1:00": "--", "2:00": "DBMS" },
     Thu: { "9:00": "--", "10:00": "DSA", "11:00": "DBMS", "1:00": "--", "2:00": "CN" },
     Fri: { "9:00": "DBMS", "10:00": "--", "11:00": "--", "1:00": "CN", "2:00": "DSA" },
   } as any;
+  const [ttData, setTtData] = useState<Record<string, Record<string, string>>>(initialTimetable);
+  const [isEditingTimetable, setIsEditingTimetable] = useState(false);
+  const [ttSaving, setTtSaving] = useState(false);
+
+  const saveCell = async (day: string, period: string, value: string) => {
+    const nextData = {
+      ...ttData,
+      [day]: { ...(ttData?.[day] || {}), [period]: value || "--" },
+    } as Record<string, Record<string, string>>;
+    setTtSaving(true);
+    try {
+      await adminApi.setTimetable({ data: nextData });
+      setTtData(nextData);
+      toast.success('Timetable updated');
+    } catch (_) {
+      toast.error('Failed to save timetable');
+    } finally {
+      setTtSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    const loadTt = async () => {
+      try {
+        const res = await adminApi.getTimetable();
+        const data = (res as any)?.data || (res as any) || {};
+        if (data && typeof data === 'object') setTtData(data as any);
+      } catch (_) {
+        // noop
+      }
+    };
+    if (activeSection === 'timetable') {
+      loadTt();
+    }
+  }, [activeSection]);
 
   const renderContent = () => {
     switch (activeSection) {
@@ -287,10 +340,15 @@ const AdminDashboard = () => {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-bold text-foreground">Timetable Management</h1>
-              <Button variant="outline">
-                <Calendar className="h-4 w-4 mr-2" />
-                Configure Slots
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Configure Slots
+                </Button>
+                <Button onClick={() => setIsEditingTimetable((v) => !v)} className={isEditingTimetable ? "btn-primary" : undefined}>
+                  {isEditingTimetable ? "Done Editing" : "Edit Timetable"}
+                </Button>
+              </div>
             </div>
 
             <Card>
@@ -314,11 +372,31 @@ const AdminDashboard = () => {
                           <td className="p-2 font-medium">{d}</td>
                           {periods.map((p) => (
                             <td key={p} className="p-1">
-                              <div className="flex items-center justify-between p-2 rounded-md border">
-                                <span>{(timetable as any)[d]?.[p] || "--"}</span>
-                                <Button size="sm" variant="outline">Edit</Button>
-                              </div>
-                            </td>
+                            <div className="p-2 rounded-md border">
+                              {isEditingTimetable ? (
+                                <Input
+                                  value={ttData?.[d]?.[p] || ""}
+                                  placeholder="--"
+                                  className="h-8"
+                                  onChange={(e) =>
+                                    setTtData((prev) => ({
+                                      ...prev,
+                                      [d]: { ...(prev?.[d] || {}), [p]: e.target.value },
+                                    }))
+                                  }
+                                  onBlur={(e) => saveCell(d, p, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      (e.target as HTMLInputElement).blur();
+                                    }
+                                  }}
+                                  disabled={ttSaving}
+                                />
+                              ) : (
+                                <span>{ttData?.[d]?.[p] || "--"}</span>
+                              )}
+                            </div>
+                          </td>
                           ))}
                         </tr>
                       ))}
@@ -524,48 +602,112 @@ const AdminDashboard = () => {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-bold text-foreground">Notice Management</h1>
-              <Button className="btn-primary">
-                <Plus className="h-4 w-4 mr-2" />
-                Create Notice
-              </Button>
+              <Dialog open={openCreateNotice} onOpenChange={setOpenCreateNotice}>
+                <DialogTrigger asChild>
+                  <Button className="btn-primary">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Notice
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Notice</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="ntitle">Title</Label>
+                      <Input id="ntitle" value={noticeForm.title} onChange={(e) => setNoticeForm({ ...noticeForm, title: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label htmlFor="ncontent">Content</Label>
+                      <Textarea id="ncontent" value={noticeForm.content} onChange={(e) => setNoticeForm({ ...noticeForm, content: e.target.value })} rows={4} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Priority</Label>
+                        <Select value={noticeForm.priority} onValueChange={(v) => setNoticeForm({ ...noticeForm, priority: v as any })}>
+                          <SelectTrigger className="w-full"><SelectValue placeholder="Priority" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="normal">Normal</SelectItem>
+                            <SelectItem value="important">Important</SelectItem>
+                            <SelectItem value="urgent">Urgent</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Target</Label>
+                        <Select value={noticeForm.target} onValueChange={(v) => setNoticeForm({ ...noticeForm, target: v as any })}>
+                          <SelectTrigger className="w-full"><SelectValue placeholder="Target" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All</SelectItem>
+                            <SelectItem value="students">Students</SelectItem>
+                            <SelectItem value="teachers">Teachers</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setOpenCreateNotice(false)}>Cancel</Button>
+                    <Button onClick={async () => {
+                      if (!noticeForm.title || !noticeForm.content) return;
+                      try {
+                        await adminApi.createNotice(noticeForm);
+                        setOpenCreateNotice(false);
+                        setNoticeForm({ title: '', content: '', priority: 'normal', target: 'all' });
+                        const res = await adminApi.listNotices(noticeFilter !== 'all' ? { target: noticeFilter } as any : undefined);
+                        setNotices((res as any)?.data || (res as any) || []);
+                        toast.success('Notice created');
+                      } catch (_) { toast.error('Failed to create'); }
+                    }}>Create</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
             
             <Card>
               <CardHeader>
-                <CardTitle>Create New Notice</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Notices</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Filter by Target</span>
+                    <Select value={noticeFilter} onValueChange={(v) => setNoticeFilter(v as any)}>
+                      <SelectTrigger className="w-44"><SelectValue placeholder="All" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Users</SelectItem>
+                        <SelectItem value="students">Students</SelectItem>
+                        <SelectItem value="teachers">Teachers</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="noticeTitle">Notice Title</Label>
-                  <Input id="noticeTitle" placeholder="Enter notice title" />
+              <CardContent>
+                <div className="space-y-3">
+                  {notices.map((n) => (
+                    <div key={n._id} className="p-4 border rounded-md">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-semibold">{n.title}</div>
+                          <div className="text-sm text-muted-foreground">{n.priority?.toUpperCase()} • {n.target}</div>
+                        </div>
+                        <div className="text-xs text-muted-foreground text-right">
+                          <div>Created: {n.createdAt ? new Date(n.createdAt).toLocaleString() : '-'}</div>
+                          <div>Updated: {n.updatedAt ? new Date(n.updatedAt).toLocaleString() : '-'}</div>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-sm">{n.content}</div>
+                      <div className="mt-3 flex justify-end">
+                        <Button variant="outline" className="text-destructive" onClick={async () => {
+                          try { await adminApi.deleteNotice(n._id); setNotices(notices.filter(x => x._id !== n._id)); toast.success('Deleted'); } catch (_) { toast.error('Failed to delete'); }
+                        }}>Delete</Button>
+                      </div>
+                    </div>
+                  ))}
+                  {notices.length === 0 && (
+                    <div className="text-sm text-muted-foreground">No notices found.</div>
+                  )}
                 </div>
-                <div>
-                  <Label htmlFor="noticeContent">Content</Label>
-                  <Textarea id="noticeContent" placeholder="Notice content..." rows={4} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="priority">Priority</Label>
-                    <select className="w-full p-2 border rounded-lg">
-                      <option>Normal</option>
-                      <option>Important</option>
-                      <option>Urgent</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label htmlFor="targetAudience">Target Audience</Label>
-                    <select className="w-full p-2 border rounded-lg">
-                      <option>All Users</option>
-                      <option>Students Only</option>
-                      <option>Teachers Only</option>
-                      <option>Specific Class</option>
-                    </select>
-                  </div>
-                </div>
-                <Button>
-                  <Bell className="h-4 w-4 mr-2" />
-                  Publish Notice
-                </Button>
               </CardContent>
             </Card>
           </div>

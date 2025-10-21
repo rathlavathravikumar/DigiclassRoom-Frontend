@@ -8,7 +8,9 @@ import {
   Users,
   Upload,
   TestTube,
-  CheckSquare
+  CheckSquare,
+  Bell,
+  Video
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,13 +21,16 @@ interface TeacherSidebarProps {
 
 const navigation = [
   { name: "Dashboard", icon: PieChart, id: "dashboard" },
-  { name: "Create Assignment", icon: ClipboardList, id: "create-assignment" },
-  { name: "Create Test", icon: TestTube, id: "create-test" },
+  { name: "My Courses", icon: BookOpen, id: "courses" },
+  { name: "Meetings", icon: Video, id: "meetings" },
+  { name: "Assignment", icon: ClipboardList, id: "assignment" },
+  { name: "Test", icon: TestTube, id: "test" },
   { name: "Manage Attendance", icon: CheckSquare, id: "attendance" },
   { name: "Discussions", icon: MessageCircle, id: "discussions" },
-  { name: "Course Plan", icon: BookOpen, id: "course-plan" },
+  { name: "Course Plan", icon: FileText, id: "course-plan" },
   { name: "Student Progress", icon: Users, id: "progress" },
-  { name: "Resources", icon: FileText, id: "resources" },
+  { name: "Resources", icon: Upload, id: "resources" },
+  { name: "Notices", icon: Bell, id: "notices" },
   { name: "Timetable", icon: Calendar, id: "timetable" },
 ];
 

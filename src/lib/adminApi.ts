@@ -31,4 +31,17 @@ export const adminApi = {
   getCoursePlan: (id: string) => http.get(`/api/v1/courses/${id}/plan`).then(r => r.data),
   setCoursePlan: (id: string, course_plan: string) =>
     http.patch(`/api/v1/courses/${id}/plan`, { course_plan }).then(r => r.data),
+
+  // Notices
+  listNotices: (params?: { target?: 'all' | 'students' | 'teachers' }) =>
+    http.get('/api/v1/admin/notices', { params }).then(r => r.data),
+  createNotice: (payload: { title: string; content: string; priority: 'normal' | 'important' | 'urgent'; target: 'all' | 'students' | 'teachers' }) =>
+    http.post('/api/v1/admin/notices', payload).then(r => r.data),
+  deleteNotice: (id: string) => http.delete(`/api/v1/admin/notices/${id}`).then(r => r.data),
+
+  // Timetable
+  getTimetable: (scope?: string) =>
+    http.get('/api/v1/admin/timetable', { params: scope ? { scope } : undefined }).then(r => r.data),
+  setTimetable: (payload: { data: Record<string, Record<string, string>>; scope?: string }) =>
+    http.put('/api/v1/admin/timetable', payload).then(r => r.data),
 };
