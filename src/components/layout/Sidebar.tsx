@@ -6,7 +6,8 @@ import {
   PieChart, 
   FileText,
   Clock,
-  Users
+  Users,
+  TrendingUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ interface SidebarProps {
 const navigation = [
   { name: "Dashboard", icon: PieChart, id: "dashboard" },
   { name: "My Courses", icon: BookOpen, id: "courses" },
+  { name: "My Progress", icon: TrendingUp, id: "progress" },
   { name: "Assignments", icon: ClipboardList, id: "assignments" },
   { name: "Timetable", icon: Calendar, id: "timetable" },
   { name: "Tests", icon: FileText, id: "tests" },

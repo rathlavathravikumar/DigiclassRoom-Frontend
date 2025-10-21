@@ -21,6 +21,7 @@ const navigation = [
   { name: "Dashboard", icon: LayoutDashboard, id: "dashboard" },
   { name: "User Management", icon: Users, id: "users" },
   { name: "Course Management", icon: BookOpen, id: "courses" },
+  { name: "Course Progress", icon: BarChart3, id: "progress" },
   { name: "Create Courses", icon: UserPlus, id: "create-course" },
   { name: "Timetable Management", icon: Calendar, id: "timetable" },
   { name: "Notice Management", icon: Bell, id: "notices" },

@@ -1,4 +1,5 @@
-const BASE_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE_URL) ||  'http://localhost:3001';
+const BASE_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE_URL) || 
+  ((typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV) ? '' : 'http://localhost:3001');
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const token = (typeof window !== 'undefined') ? localStorage.getItem('accessToken') : null;
@@ -59,6 +60,8 @@ export const api = {
   },
   createAssignment: async (payload: { title: string; description?: string; due_date: string; course_id: string }) =>
     http<ApiEnvelope<any>>(`/api/v1/assignments`, { method: 'POST', body: JSON.stringify(payload) }),
+  deleteAssignment: async (id: string) =>
+    http<ApiEnvelope<any>>(`/api/v1/assignments/${id}`, { method: 'DELETE' }),
   getTests: async () => {
     return http<ApiEnvelope<any[]>>(`/api/v1/tests/`);
   },
@@ -66,8 +69,20 @@ export const api = {
     http<ApiEnvelope<any>>(`/api/v1/tests/${id}`),
   createTest: async (payload: { title: string; description?: string; scheduled_at: string; course_id: string }) =>
     http<ApiEnvelope<any>>(`/api/v1/tests`, { method: 'POST', body: JSON.stringify(payload) }),
+  deleteTest: async (id: string) =>
+    http<ApiEnvelope<any>>(`/api/v1/tests/${id}`, { method: 'DELETE' }),
   submitTest: async (id: string, answers: Array<string|number>) =>
     http<ApiEnvelope<{ correct: number; totalQuestions: number; score: number; max_score: number }>>(`/api/v1/tests/${id}/submit`, { method: 'POST', body: JSON.stringify({ answers }) }),
+  
+  // Progress APIs
+  getStudentProgress: async (studentId: string) =>
+    http<ApiEnvelope<any>>(`/api/v1/progress/student/${studentId}`),
+  getCourseProgress: async (courseId: string) =>
+    http<ApiEnvelope<any>>(`/api/v1/progress/course/${courseId}`),
+  getAdminCourseProgress: async (courseId: string) =>
+    http<ApiEnvelope<any>>(`/api/v1/progress/admin/course/${courseId}`),
+  getAdminCoursesOverview: async () =>
+    http<ApiEnvelope<any>>(`/api/v1/progress/admin/courses`),
   // Public notices for teachers/students
   listPublicNotices: async (params?: { target?: 'all' | 'students' | 'teachers'; admin_id?: string }) => {
     const u = new URLSearchParams();
@@ -234,6 +249,20 @@ export const api = {
     const qs = limit ? `?course_id=${courseId}&limit=${limit}` : `?course_id=${courseId}`;
     return http<ApiEnvelope<any[]>>(`/api/v1/attendance/history${qs}`);
   },
+  getAttendanceSummary: async (params: { course_id: string; month?: string }) => {
+    const qs = new URLSearchParams();
+    qs.set('course_id', params.course_id);
+    if (params.month) qs.set('month', params.month);
+    return http<ApiEnvelope<any[]>>(`/api/v1/attendance/summary?${qs.toString()}`);
+  },
   getStudentAttendance: async (courseId: string, studentId: string) =>
     http<ApiEnvelope<any>>(`/api/v1/attendance/student?course_id=${courseId}&student_id=${studentId}`),
+  
+  // Dashboard Statistics APIs
+  getAdminStats: async () =>
+    http<ApiEnvelope<{ totalStudents: number; totalTeachers: number; totalCourses: number; totalNotices: number }>>(`/api/v1/admin/stats`),
+  getTeacherStats: async (teacherId: string) =>
+    http<ApiEnvelope<{ activeCourses: number; totalStudents: number; pendingSubmissions: number; testsCreated: number }>>(`/api/v1/teacher/stats/${teacherId}`),
+  getStudentStats: async (studentId: string) =>
+    http<ApiEnvelope<{ enrolledCourses: number; completedAssignments: number; pendingAssignments: number; averageGrade: number }>>(`/api/v1/student/stats/${studentId}`),
 };

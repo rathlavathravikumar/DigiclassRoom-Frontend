@@ -18,7 +18,8 @@ import {
   Calendar,
   FileText,
   TrendingUp,
-  Video
+  Video,
+  Trash2
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
@@ -28,12 +29,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import MeetingForm from "@/components/meetings/MeetingForm";
 import TeacherCoursesList from "@/components/courses/TeacherCoursesList";
 import CourseDetailPage from "@/components/courses/CourseDetailPage";
+import CourseProgress from "@/components/progress/CourseProgress";
 
 
 
 const TeacherDashboard = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [selectedProgressCourseId, setSelectedProgressCourseId] = useState<string | null>(null);
   const [questions, setQuestions] = useState([
     { question: "", options: ["", "", "", ""], correct: "A", marks: 1 },
   ]);
@@ -50,6 +53,12 @@ const TeacherDashboard = () => {
   const [assignmentSubmissions, setAssignmentSubmissions] = useState<any[]>([]);
   const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
   const [testMarks, setTestMarks] = useState<any[]>([]);
+  // New state for inline submissions and scores
+  const [expandedAssignments, setExpandedAssignments] = useState<Set<string>>(new Set());
+  const [inlineSubmissions, setInlineSubmissions] = useState<Record<string, any[]>>({});
+  const [inlineMarksEdits, setInlineMarksEdits] = useState<Record<string, Record<string, number>>>({});
+  const [expandedTests, setExpandedTests] = useState<Set<string>>(new Set());
+  const [inlineTestScores, setInlineTestScores] = useState<Record<string, any[]>>({});
   // Courses for form selects (rename to avoid collision with mock 'courses')
   const [teacherCourses, setTeacherCourses] = useState<any[]>([]);
   // Create Assignment form state
@@ -58,6 +67,9 @@ const TeacherDashboard = () => {
   const [newTest, setNewTest] = useState<{ course_id: string; title: string; description: string; scheduled_at: string; duration?: string }>({ course_id: "", title: "", description: "", scheduled_at: "", duration: "" });
   // Meeting dialog state
   const [isCreateMeetingDialogOpen, setIsCreateMeetingDialogOpen] = useState(false);
+  // Dashboard stats state
+  const [teacherStats, setTeacherStats] = useState<{ activeCourses: number; totalStudents: number; pendingSubmissions: number; testsCreated: number } | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
 
   useEffect(() => {
     if (activeSection === 'notices') {
@@ -85,18 +97,19 @@ const TeacherDashboard = () => {
     }
   }, [activeSection, user?._id]);
 
-  // Load courses for selects when landing on assignment/test sections (load all to widen availability)
+  // Load courses for selects when landing on assignment/test/attendance sections (load only teacher's courses)
   useEffect(() => {
-    if (activeSection === 'assignment' || activeSection === 'test' || activeSection === 'courses' || activeSection === 'dashboard' || activeSection === 'course-plan') {
+    if (activeSection === 'assignment' || activeSection === 'test' || activeSection === 'courses' || activeSection === 'dashboard' || activeSection === 'course-plan' || activeSection === 'attendance') {
       (async () => {
         try {
-          const res = await api.getCourses();
+          // Fetch only courses assigned to the current teacher
+          const res = await api.getCourses({ teacher_id: user?._id });
           const list = (res as any)?.data || (res as any) || [];
           setTeacherCourses(list);
         } catch (_) { setTeacherCourses([]); }
       })();
     }
-  }, [activeSection]);
+  }, [activeSection, user?._id]);
 
   useEffect(() => {
     if (selectedAssignmentId) {
@@ -198,31 +211,31 @@ const TeacherDashboard = () => {
   // Calculate total marks from all questions
   const totalMarks = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
 
-  const teacherStats = [
+  const teacherStatsCards = [
     {
       title: "Active Courses",
-      value: "3",
+      value: teacherStats?.activeCourses?.toString() || "0",
       change: "This semester",
       icon: BookOpen,
       color: "success"
     },
     {
       title: "Total Students",
-      value: "240",
+      value: teacherStats?.totalStudents?.toString() || "0",
       change: "Across all courses",
       icon: Users,
       color: "primary"
     },
     {
       title: "Pending Submissions",
-      value: "28",
+      value: teacherStats?.pendingSubmissions?.toString() || "0",
       change: "Need grading",
       icon: ClipboardList,
       color: "warning"
     },
     {
       title: "Tests Created",
-      value: "12",
+      value: teacherStats?.testsCreated?.toString() || "0",
       change: "This month",
       icon: TestTube,
       color: "success"
@@ -232,80 +245,169 @@ const TeacherDashboard = () => {
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
-  const [attendance, setAttendance] = useState<Record<string, string>>({
-    "1": "Present",
-    "2": "Absent",
-    "3": "Present",
-  });
-
-  const students = [
-    { id: "1", name: "Ravi Kumar", roll: "21CSE001" },
-    { id: "2", name: "Priya Sharma", roll: "21CSE002" },
-    { id: "3", name: "Arjun Reddy", roll: "21CSE003" },
-  ];
+  const [attendance, setAttendance] = useState<Record<string, string>>({});
+  const [selectedCourseForAttendance, setSelectedCourseForAttendance] = useState<string>("");
+  const [attendanceStudents, setAttendanceStudents] = useState<any[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [savingAttendance, setSavingAttendance] = useState(false);
 
   const handleAttendanceChange = (id: string, status: string) => {
     setAttendance((prev) => ({ ...prev, [id]: status }));
   };
 
-  const handleSaveAttendance = () => {
-    console.log("Attendance saved for:", selectedDate, attendance);
-    alert(`Attendance saved for ${selectedDate}`);
-  };
-
-  const discussions = [
-    {
-      id: "1",
-      title: "Confusion about Binary Search Trees implementation",
-      content: "I'm having trouble understanding the insertion logic in BST. Can someone explain the recursive approach?",
-      course: "DSA",
-      author: "Alex Kumar",
-      timeAgo: "2 hours ago",
-      replies: 8,
-      likes: 12,
-      isResolved: false,
-      tag: "Help Needed"
-    },
-    {
-      id: "2",
-      title: "SQL JOIN operations - Inner vs Outer joins",
-      content: "What's the practical difference between INNER JOIN and LEFT OUTER JOIN? When should we use each?",
-      course: "DBMS",
-      author: "Sarah Chen",
-      timeAgo: "4 hours ago",
-      replies: 15,
-      likes: 20,
-      isResolved: true,
-      tag: "Database"
+  const fetchStudentsForCourse = async (courseId: string) => {
+    if (!courseId) {
+      setAttendanceStudents([]);
+      setAttendance({});
+      return;
     }
-  ];
-  const [selectedDiscussion, setSelectedDiscussion] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState<string>("");
-  const [allDiscussions, setAllDiscussions] = useState<any[]>(discussions as any[]);
 
-  const handleSelectDiscussion = (id: string) => {
-    setSelectedDiscussion((prev) => (prev === id ? null : id)); // toggle open/close
+    setLoadingStudents(true);
+    try {
+      const res = await api.getCourse(courseId);
+      const courseData = (res as any)?.data || {};
+      const students = courseData.students || [];
+      setAttendanceStudents(students);
+      
+      // Initialize attendance state for all students as "Present" by default
+      const initialAttendance: Record<string, string> = {};
+      students.forEach((student: any) => {
+        initialAttendance[student._id || student.id] = "Present";
+      });
+      setAttendance(initialAttendance);
+    } catch (error) {
+      console.error("Failed to fetch students:", error);
+      setAttendanceStudents([]);
+      setAttendance({});
+    } finally {
+      setLoadingStudents(false);
+    }
   };
 
-  const handleReplySubmit = (discussionId: string) => {
-    if (!replyText.trim()) return alert("Please enter a reply before submitting.");
+  const handleSaveAttendance = async () => {
+    if (!selectedCourseForAttendance) {
+      alert("Please select a course first");
+      return;
+    }
 
-    const updated = allDiscussions.map((d: any) =>
-      d.id === discussionId
-        ? {
-            ...d,
-            repliesList: [
-              ...(d.repliesList || []),
-              { author: "Teacher", content: replyText, timeAgo: "Just now" },
-            ],
-          }
-        : d
-    );
+    if (attendanceStudents.length === 0) {
+      alert("No students found for this course");
+      return;
+    }
 
-    setAllDiscussions(updated);
-    setReplyText("");
-    alert("Reply posted successfully!");
+    setSavingAttendance(true);
+    try {
+      // Prepare attendance records
+      const records = attendanceStudents.map((student) => ({
+        student_id: student._id || student.id,
+        status: (attendance[student._id || student.id] || "Present").toLowerCase() as "present" | "absent"
+      }));
+
+      await api.markAttendance({
+        course_id: selectedCourseForAttendance,
+        date: selectedDate,
+        records
+      });
+
+      alert(`Attendance saved successfully for ${selectedDate}`);
+    } catch (error) {
+      console.error("Failed to save attendance:", error);
+      alert("Failed to save attendance. Please try again.");
+    } finally {
+      setSavingAttendance(false);
+    }
   };
+
+  // Effect to fetch students when course selection changes
+  useEffect(() => {
+    if (selectedCourseForAttendance) {
+      fetchStudentsForCourse(selectedCourseForAttendance);
+    }
+  }, [selectedCourseForAttendance]);
+
+  // Load teacher stats for dashboard
+  useEffect(() => {
+    if (activeSection === "dashboard" && user?._id) {
+      const loadStats = async () => {
+        setLoadingStats(true);
+        try {
+          const res = await api.getTeacherStats(user._id);
+          setTeacherStats((res as any)?.data || { activeCourses: 0, totalStudents: 0, pendingSubmissions: 0, testsCreated: 0 });
+        } catch (e) {
+          console.error('Failed to load teacher stats:', e);
+          setTeacherStats({ activeCourses: 0, totalStudents: 0, pendingSubmissions: 0, testsCreated: 0 });
+        } finally {
+          setLoadingStats(false);
+        }
+      };
+      loadStats();
+    }
+  }, [activeSection, user?._id]);
+
+  // Functions for inline submissions and scores
+  const toggleAssignmentSubmissions = async (assignmentId: string) => {
+    const newExpanded = new Set(expandedAssignments);
+    
+    if (expandedAssignments.has(assignmentId)) {
+      // Collapse - remove from expanded set and clear data
+      newExpanded.delete(assignmentId);
+      const newSubmissions = { ...inlineSubmissions };
+      delete newSubmissions[assignmentId];
+      setInlineSubmissions(newSubmissions);
+    } else {
+      // Expand - add to expanded set and fetch data
+      newExpanded.add(assignmentId);
+      try {
+        const [assignmentRes, submissionsRes, marksRes] = await Promise.all([
+          api.getAssignment(assignmentId),
+          api.getSubmissionsByItem('assignment', assignmentId),
+          api.getMarksByItem('assignment', assignmentId)
+        ]);
+        
+        const submissions = (submissionsRes as any)?.data || [];
+        setInlineSubmissions(prev => ({ ...prev, [assignmentId]: submissions }));
+        
+        // Initialize marks edits for this assignment
+        const marks = (marksRes as any)?.data || [];
+        const marksMap: Record<string, number> = {};
+        marks.forEach((m: any) => {
+          const studentId = m.student_id?._id || m.student_id?.id || m.student_id;
+          if (studentId) marksMap[studentId] = m.score || 0;
+        });
+        setInlineMarksEdits(prev => ({ ...prev, [assignmentId]: marksMap }));
+      } catch (error) {
+        console.error('Failed to fetch assignment submissions:', error);
+      }
+    }
+    
+    setExpandedAssignments(newExpanded);
+  };
+
+  const toggleTestScores = async (testId: string) => {
+    const newExpanded = new Set(expandedTests);
+    
+    if (expandedTests.has(testId)) {
+      // Collapse - remove from expanded set and clear data
+      newExpanded.delete(testId);
+      const newScores = { ...inlineTestScores };
+      delete newScores[testId];
+      setInlineTestScores(newScores);
+    } else {
+      // Expand - add to expanded set and fetch data
+      newExpanded.add(testId);
+      try {
+        const marksRes = await api.getMarksByItem('test', testId);
+        const scores = (marksRes as any)?.data || [];
+        setInlineTestScores(prev => ({ ...prev, [testId]: scores }));
+      } catch (error) {
+        console.error('Failed to fetch test scores:', error);
+      }
+    }
+    
+    setExpandedTests(newExpanded);
+  };
+
+  // Discussions are now handled within individual course pages - removed mock data
   
   // Resource state
 const [resources, setResources] = useState<
@@ -483,90 +585,7 @@ const handleCourseResourceUpload = async () => {
     </div>
   );
 
-      case "discussions" : 
-         return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-foreground">Student Discussions</h1>
-        <p className="text-muted-foreground">
-          View and reply to student queries below.
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        {allDiscussions.map((discussion) => (
-          <div
-            key={discussion.id}
-            className="border rounded-lg p-4 shadow-sm bg-card hover:shadow-md transition"
-          >
-            <div
-              onClick={() => handleSelectDiscussion(discussion.id)}
-              className="cursor-pointer"
-            >
-              <div className="flex justify-between items-center">
-                <h2 className="text-lg font-semibold">{discussion.title}</h2>
-                <span
-                  className={`text-sm px-2 py-1 rounded ${
-                    discussion.isResolved
-                      ? "bg-green-100 text-green-800"
-                      : "bg-yellow-100 text-yellow-800"
-                  }`}
-                >
-                  {discussion.tag}
-                </span>
-              </div>
-              <p className="text-muted-foreground mt-1">{discussion.content}</p>
-              <p className="text-xs text-gray-500 mt-2">
-                {discussion.author} • {discussion.timeAgo} • {discussion.replies} replies
-              </p>
-            </div>
-
-            {/* Expanded discussion with replies */}
-            {selectedDiscussion === discussion.id && (
-              <div className="mt-4 border-t pt-4 space-y-3">
-                <div className="space-y-2">
-                  {((discussion as any).repliesList || []).map((r: any, index: number) => (
-                    <div
-                      key={index}
-                      className="bg-muted/40 p-2 rounded-md text-sm text-gray-800"
-                    >
-                      <p className="font-medium">{r.author}</p>
-                      <p>{r.content}</p>
-                      <p className="text-xs text-gray-500">{r.timeAgo}</p>
-                    </div>
-                  ))}
-                  {(!((discussion as any).repliesList) ||
-                    (discussion as any).repliesList.length === 0) && (
-                    <p className="text-sm text-gray-500 italic">
-                      No replies yet.
-                    </p>
-                  )}
-                </div>
-
-                {/* Reply input */}
-                <div className="flex gap-2 mt-3">
-                  <input
-                    type="text"
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    placeholder="Type your reply..."
-                    className="flex-1 border rounded-md px-3 py-2 text-sm"
-                  />
-                  <Button
-                    size="sm"
-                    className="btn-primary"
-                    onClick={() => handleReplySubmit(discussion.id)}
-                  >
-                    Reply
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+      // Discussions removed - now handled within individual course pages
 
       case "course-plan":
         return (
@@ -610,136 +629,218 @@ const handleCourseResourceUpload = async () => {
 
       case "dashboard":
         return (
-          <div className="space-y-8">
-            <div className="flex items-center justify-between">
-              <h1 className="text-3xl font-bold text-foreground">Teacher Dashboard</h1>
-              <p className="text-muted-foreground">Manage your courses and students</p>
+          <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+            {/* Header Section */}
+            <div className="mb-8 px-1">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h1 className="text-3xl lg:text-4xl font-bold text-foreground tracking-tight">
+                    Teacher Dashboard
+                  </h1>
+                  <p className="text-muted-foreground mt-2 text-base">
+                    Manage your courses and students efficiently
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-sm text-muted-foreground">
+                    {loadingStats ? 'Loading...' : `${teacherCourses.length} Active Courses`}
+                  </div>
+                </div>
+              </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-              {teacherStats.map((stat, index) => {
+            {/* Stats Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-8">
+              {teacherStatsCards.map((stat, index) => {
                 const Icon = stat.icon;
                 
                 return (
-                  <div key={index} className="card-academic p-6 hover:scale-105 transition-transform">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground mb-1">
-                          {stat.title}
-                        </p>
-                        <p className="text-2xl font-bold text-foreground">
-                          {stat.value}
-                        </p>
+                  <div 
+                    key={index} 
+                    className="group relative bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+                  >
+                    {/* Background Gradient */}
+                    <div className={`absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-300 ${
+                      stat.color === 'success' ? 'bg-gradient-to-br from-success to-success' :
+                      stat.color === 'warning' ? 'bg-gradient-to-br from-warning to-warning' :
+                      stat.color === 'primary' ? 'bg-gradient-to-br from-primary to-primary' : 'bg-gradient-to-br from-muted to-muted'
+                    }`} />
+                    
+                    <div className="relative z-10">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-muted-foreground mb-2 tracking-wide uppercase">
+                            {stat.title}
+                          </p>
+                          <p className="text-3xl font-bold text-foreground leading-none">
+                            {loadingStats ? '...' : stat.value}
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-xl shadow-sm ${
+                          stat.color === 'success' ? 'bg-success/10 text-success' :
+                          stat.color === 'warning' ? 'bg-warning/10 text-warning' :
+                          stat.color === 'primary' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                        }`}>
+                          <Icon className="h-6 w-6" />
+                        </div>
                       </div>
-                      <div className={`p-3 rounded-lg ${
-                        stat.color === 'success' ? 'bg-success-light' :
-                        stat.color === 'warning' ? 'bg-warning-light' :
-                        stat.color === 'primary' ? 'bg-primary/10' : 'bg-muted'
-                      }`}>
-                        <Icon className={`h-6 w-6 ${
-                          stat.color === 'success' ? 'text-success' :
-                          stat.color === 'warning' ? 'text-warning' :
-                          stat.color === 'primary' ? 'text-primary' : 'text-muted-foreground'
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${
+                          stat.color === 'success' ? 'bg-success' :
+                          stat.color === 'warning' ? 'bg-warning' :
+                          stat.color === 'primary' ? 'bg-primary' : 'bg-muted-foreground'
                         }`} />
+                        <span className="text-sm text-muted-foreground font-medium">
+                          {stat.change}
+                        </span>
                       </div>
-                    </div>
-                    <div className="mt-4">
-                      <span className="text-sm text-muted-foreground">
-                        {stat.change}
-                      </span>
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            <div className="grid lg:grid-cols-3 gap-8">
-              <div>
-                <h2 className="text-xl font-semibold mb-6">My Courses</h2>
-                <div className="space-y-4">
+            {/* Main Content Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+              {/* My Courses Section */}
+              <div className="lg:col-span-5">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                    <BookOpen className="h-5 w-5 text-primary" />
+                    My Courses
+                  </h2>
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={() => setActiveSection('courses')}
+                    className="text-xs hover:bg-primary/5"
+                  >
+                    View All
+                  </Button>
+                </div>
+                <div className="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
                   {teacherCourses.length > 0 ? (
                     teacherCourses.map((course: any) => (
-                      <div key={course._id || course.id} className="card-academic p-6">
+                      <div 
+                        key={course._id || course.id} 
+                        className="group bg-card border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary/20"
+                      >
                         <div className="flex items-start justify-between mb-4">
-                          <div>
-                            <h3 className="text-lg font-semibold text-foreground mb-2">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-lg font-semibold text-foreground mb-2 truncate group-hover:text-primary transition-colors">
                               {course.name || course.title}
                             </h3>
-                            <div className="flex space-x-4 text-sm text-muted-foreground">
-                              <span className="flex items-center"><Users className="h-4 w-4 mr-1" />{course.students_count || course.studentCount || 0} students</span>
-                              <span className="flex items-center"><TestTube className="h-4 w-4 mr-1" />{course.tests_count || 0} tests</span>
-                              <span className="flex items-center"><FileText className="h-4 w-4 mr-1" />{course.resourceCount || 0} resources</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Users className="h-3.5 w-3.5" />
+                                {course.students_count || course.studentCount || 0} students
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <TestTube className="h-3.5 w-3.5" />
+                                {course.tests_count || 0} tests
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <FileText className="h-3.5 w-3.5" />
+                                {course.resourceCount || 0} resources
+                              </span>
                             </div>
                           </div>
-                          <Badge className="status-due">
+                          <Badge className="status-due shrink-0 ml-3">
                             {course.pendingSubmissions || 0} pending
                           </Badge> 
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground flex items-center">
-                            <Calendar className="h-4 w-4 mr-1" />
+                        <div className="flex items-center justify-between pt-3 border-t border-border/50">
+                          <span className="text-sm text-muted-foreground flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5" />
                             {course.schedule || 'No schedule'}
                           </span>
                           <Button 
                             size="sm" 
-                            className="btn-success"
+                            className="btn-success h-8 px-4 text-xs"
                             onClick={() => {
                               setSelectedCourseId(course._id || course.id);
                               setActiveSection('courses');
                             }}
                           >
-                            View
+                            View Course
                           </Button>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <p className="text-muted-foreground">No courses available yet.</p>
+                    <div className="text-center py-12 text-muted-foreground">
+                      <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No courses available yet.</p>
+                    </div>
                   )}
                 </div>
               </div>
 
-              <div>
-                <UpcomingMeetings 
-                  userRole="teacher"
-                  limit={5}
-                  showCreateButton={true}
-                  onCreateMeeting={() => setIsCreateMeetingDialogOpen(true)}
-                  onViewAll={() => setActiveSection("meetings")}
-                />
+              {/* Upcoming Meetings Section */}
+              <div className="lg:col-span-4">
+                <div className="h-full">
+                  <UpcomingMeetings 
+                    userRole="teacher"
+                    limit={4}
+                    showCreateButton={true}
+                    onCreateMeeting={() => setIsCreateMeetingDialogOpen(true)}
+                    onViewAll={() => setActiveSection("meetings")}
+                  />
+                </div>
               </div>
 
-              <div>
-                <h2 className="text-xl font-semibold mb-6">Quick Actions</h2>
-                <div className="grid grid-cols-2 gap-4">
+              {/* Quick Actions Section */}
+              <div className="lg:col-span-3">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    Quick Actions
+                  </h2>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
                   <Button 
-                    className="h-24 flex-col btn-success"
+                    className="group h-20 flex-col gap-2 bg-gradient-to-br from-success/10 to-success/5 border border-success/20 text-success hover:from-success/20 hover:to-success/10 hover:border-success/30 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300"
                     onClick={() => setActiveSection("upload")}
                   >
-                    <Upload className="h-6 w-6 mb-2" />
-                    Upload Resource
+                    <Upload className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-medium">Upload Resource</span>
                   </Button>
                   <Button 
-                    className="h-24 flex-col btn-primary"
+                    className="group h-20 flex-col gap-2 bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 text-primary hover:from-primary/20 hover:to-primary/10 hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300"
                     onClick={() => setActiveSection("assignment")}
                   >
-                    <ClipboardList className="h-6 w-6 mb-2" />
-                    Assignment
+                    <ClipboardList className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-medium">Assignment</span>
                   </Button>
                   <Button 
-                    className="h-24 flex-col btn-success"
+                    className="group h-20 flex-col gap-2 bg-gradient-to-br from-warning/10 to-warning/5 border border-warning/20 text-warning hover:from-warning/20 hover:to-warning/10 hover:border-warning/30 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300"
                     onClick={() => setActiveSection("test")}
                   >
-                    <TestTube className="h-6 w-6 mb-2" />
-                    Test
+                    <TestTube className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-medium">Create Test</span>
                   </Button>
                   <Button 
-                    className="h-24 flex-col btn-primary"
+                    className="group h-20 flex-col gap-2 bg-gradient-to-br from-accent/10 to-accent/5 border border-accent/20 text-accent-foreground hover:from-accent/20 hover:to-accent/10 hover:border-accent/30 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300"
                     onClick={() => setActiveSection("meetings")}
                   >
-                    <Video className="h-6 w-6 mb-2" />
-                    Meetings
+                    <Video className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-medium">Meetings</span>
                   </Button>
+                </div>
+                
+                {/* Additional Quick Stats */}
+                <div className="mt-6 p-4 bg-gradient-to-r from-muted/50 to-muted/30 rounded-xl border border-border/50">
+                  <h3 className="text-sm font-medium text-foreground mb-3">Today's Overview</h3>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-primary">{teacherCourses.length}</div>
+                      <div className="text-muted-foreground">Active Courses</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-success">{teacherStats?.totalStudents || 0}</div>
+                      <div className="text-muted-foreground">Total Students</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -750,7 +851,7 @@ case "attendance" :
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-foreground">Attendance</h1>
+        <h1 className="text-3xl font-bold text-foreground">Mark Attendance</h1>
         <input
           type="date"
           value={selectedDate}
@@ -759,41 +860,115 @@ case "attendance" :
         />
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full border border-gray-200 rounded-lg">
-          <thead className="bg-muted text-left">
-            <tr>
-              <th className="px-4 py-2 border-b">Roll No</th>
-              <th className="px-4 py-2 border-b">Student Name</th>
-              <th className="px-4 py-2 border-b">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {students.map((student) => (
-              <tr key={student.id} className="hover:bg-muted/40">
-                <td className="px-4 py-2 border-b">{student.roll}</td>
-                <td className="px-4 py-2 border-b">{student.name}</td>
-                <td className="px-4 py-2 border-b">
-                  <select
-                    value={attendance[student.id] || "Absent"}
-                    onChange={(e) =>
-                      handleAttendanceChange(student.id, e.target.value)
-                    }
-                    className="border rounded-md px-2 py-1 text-sm"
-                  >
-                    <option value="Present">Present</option>
-                    <option value="Absent">Absent</option>
-                  </select>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Course Selection */}
+      <div className="bg-card p-4 rounded-lg border">
+        <Label htmlFor="courseSelect" className="text-sm font-medium mb-2 block">
+          Select Course *
+        </Label>
+        <select
+          id="courseSelect"
+          className="w-full p-3 border rounded-lg bg-background"
+          value={selectedCourseForAttendance}
+          onChange={(e) => setSelectedCourseForAttendance(e.target.value)}
+        >
+          <option value="">Choose a course to mark attendance...</option>
+          {teacherCourses.map((course: any) => (
+            <option key={course._id || course.id} value={course._id || course.id}>
+              {course.name || course.title} ({course.code || 'No Code'})
+            </option>
+          ))}
+        </select>
+        {!selectedCourseForAttendance && (
+          <p className="text-sm text-muted-foreground mt-1">
+            Please select a course to view and mark attendance for students
+          </p>
+        )}
       </div>
 
-      <Button onClick={handleSaveAttendance} className="btn-primary">
-        Save Attendance
-      </Button>
+      {/* Students Table */}
+      {selectedCourseForAttendance && (
+        <div className="bg-card rounded-lg border">
+          {loadingStudents ? (
+            <div className="p-8 text-center">
+              <p className="text-muted-foreground">Loading students...</p>
+            </div>
+          ) : attendanceStudents.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-muted-foreground">
+                No students enrolled in this course
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="p-4 border-b">
+                <h3 className="font-semibold">
+                  Students ({attendanceStudents.length})
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Mark attendance for {selectedDate}
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Student ID</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Student Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Email</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendanceStudents.map((student) => {
+                      const studentId = student._id || student.id;
+                      return (
+                        <tr key={studentId} className="hover:bg-muted/40 border-b">
+                          <td className="px-4 py-3 text-sm">{student.clg_id || studentId}</td>
+                          <td className="px-4 py-3 text-sm font-medium">{student.name}</td>
+                          <td className="px-4 py-3 text-sm text-muted-foreground">{student.email}</td>
+                          <td className="px-4 py-3">
+                            <select
+                              value={attendance[studentId] || "Present"}
+                              onChange={(e) => handleAttendanceChange(studentId, e.target.value)}
+                              className="border rounded-md px-3 py-1 text-sm bg-background"
+                            >
+                              <option value="Present">Present</option>
+                              <option value="Absent">Absent</option>
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Save Button */}
+      {selectedCourseForAttendance && attendanceStudents.length > 0 && (
+        <div className="flex justify-end space-x-3">
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              setSelectedCourseForAttendance("");
+              setAttendanceStudents([]);
+              setAttendance({});
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSaveAttendance} 
+            className="btn-primary"
+            disabled={savingAttendance}
+          >
+            {savingAttendance ? "Saving..." : "Save Attendance"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 case "upload":
@@ -896,91 +1071,162 @@ case "upload":
       case "assignment":
         return (
           <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-foreground">Assignments</h1>
+            <div className="flex items-center justify-between">
+              <h1 className="text-3xl font-bold text-foreground">Assignments</h1>
+              <Button 
+                className="btn-primary"
+                onClick={() => {
+                  // Scroll to create assignment form
+                  const createForm = document.getElementById('create-assignment-form');
+                  createForm?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Assignment
+              </Button>
+            </div>
             <Card>
               <CardHeader>
                 <CardTitle>My Assignments</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {(assignments || []).map((a: any) => (
-                  <div key={a._id || a.id} className="p-3 border rounded-md flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{a.title || a.name || 'Assignment'}</div>
-                      <div className="text-xs text-muted-foreground">Total Marks: {a.total_marks ?? a.total ?? '--'}</div>
-                    </div>
-                    <Button size="sm" onClick={() => setSelectedAssignmentId(a._id || a.id)}>View Submissions</Button>
-                  </div>
-                ))}
-                {(assignments || []).length === 0 && (
-                  <div className="text-sm text-muted-foreground">No assignments found.</div>
-                )}
-              </CardContent>
-            </Card>
-            {assignmentDetail && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Submissions: {assignmentDetail?.title || assignmentDetail?.name || 'Assignment'}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {(assignmentSubmissions || []).map((s: any) => {
-                    const sid = s.student_id?._id || s.student_id?.id || s.student_id;
-                    const scoreVal = marksEdits[sid] ?? '';
-                    return (
-                      <div key={s._id || sid} className="p-3 border rounded-md flex items-center justify-between gap-4">
-                        <div className="min-w-0">
-                          <div className="font-medium truncate">{s.student_id?.name || 'Student'}</div>
-                          {s?.file_url && (
-                            <a className="text-xs text-blue-600 hover:underline" href={s.file_url} target="_blank" rel="noreferrer">View submission</a>
-                          )}
-                          {s?.link && (
-                            <a className="block text-xs text-blue-600 hover:underline" href={s.link} target="_blank" rel="noreferrer">External link</a>
-                          )}
-                          {s?.text && (
-                            <div className="text-xs text-muted-foreground truncate">{s.text}</div>
-                          )}
+              <CardContent className="space-y-4">
+                {(assignments || []).map((a: any) => {
+                  const assignmentId = a._id || a.id;
+                  const isExpanded = expandedAssignments.has(assignmentId);
+                  const submissions = inlineSubmissions[assignmentId] || [];
+                  const marksForAssignment = inlineMarksEdits[assignmentId] || {};
+                  
+                  return (
+                    <div key={assignmentId} className="border rounded-lg">
+                      {/* Assignment Header */}
+                      <div className="p-4 flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">{a.title || a.name || 'Assignment'}</div>
+                          <div className="text-xs text-muted-foreground">Total Marks: {a.total_marks ?? a.total ?? '--'}</div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            className="w-24"
-                            value={scoreVal}
-                            onChange={(e) => setMarksEdits({ ...marksEdits, [sid]: Number(e.target.value) })}
-                            placeholder="Marks"
-                          />
-                          <Button
-                            size="sm"
+                          <Button 
+                            size="sm" 
+                            variant={isExpanded ? "secondary" : "default"}
+                            onClick={() => toggleAssignmentSubmissions(assignmentId)}
+                          >
+                            {isExpanded ? 'Hide Submissions' : 'View Submissions'}
+                          </Button>
+                          <Button 
+                            size="sm" 
                             variant="outline"
+                            className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
                             onClick={async () => {
-                              try {
-                                const maxScore = (assignmentDetail?.totalMarks as number) || 100;
-                                const scoreValNum = Number(marksEdits[sid]);
-                                if (!Number.isFinite(scoreValNum)) { alert('Enter a valid score'); return; }
-                                await api.upsertMarks({
-                                  type: 'assignment',
-                                  ref_id: selectedAssignmentId!,
-                                  student_id: sid,
-                                  score: scoreValNum,
-                                  max_score: maxScore,
-                                  remarks: '',
-                                  course_id: assignmentDetail?.course_id || undefined,
-                                });
-                                alert('Marks saved');
-                              } catch (e) { alert('Failed to save marks'); }
+                              if (confirm(`Are you sure you want to delete "${a.title || 'this assignment'}"? This action cannot be undone.`)) {
+                                try {
+                                  await api.deleteAssignment(assignmentId);
+                                  // Refresh assignments list
+                                  if (user?._id) {
+                                    const res = await api.getAssignments({ teacher_id: user._id });
+                                    const list = (res as any)?.data || (res as any) || [];
+                                    setAssignments(list);
+                                  }
+                                  alert('Assignment deleted successfully');
+                                } catch (error) {
+                                  console.error('Failed to delete assignment:', error);
+                                  alert('Failed to delete assignment');
+                                }
+                              }
                             }}
                           >
-                            Save
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
-                    );
-                  })}
-                  {(assignmentSubmissions || []).length === 0 && (
-                    <div className="text-sm text-muted-foreground">No submissions yet.</div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-            <Card>
+                      
+                      {/* Inline Submissions */}
+                      {isExpanded && (
+                        <div className="border-t bg-muted/20">
+                          <div className="p-4">
+                            <h4 className="font-medium mb-3 text-sm">Submissions ({submissions.length})</h4>
+                            {submissions.length > 0 ? (
+                              <div className="space-y-3">
+                                {submissions.map((s: any) => {
+                                  const sid = s.student_id?._id || s.student_id?.id || s.student_id;
+                                  const scoreVal = marksForAssignment[sid] ?? '';
+                                  return (
+                                    <div key={s._id || sid} className="p-3 bg-background border rounded-md flex items-center justify-between gap-4">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="font-medium truncate">{s.student_id?.name || 'Student'}</div>
+                                        <div className="text-xs text-muted-foreground">{s.student_id?.email || ''}</div>
+                                        {s?.file_url && (
+                                          <a className="text-xs text-blue-600 hover:underline" href={s.file_url} target="_blank" rel="noreferrer">📎 View submission</a>
+                                        )}
+                                        {s?.link && (
+                                          <a className="block text-xs text-blue-600 hover:underline" href={s.link} target="_blank" rel="noreferrer">🔗 External link</a>
+                                        )}
+                                        {s?.text && (
+                                          <div className="text-xs text-muted-foreground mt-1 truncate">{s.text}</div>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          type="number"
+                                          className="w-20 h-8"
+                                          value={scoreVal}
+                                          onChange={(e) => {
+                                            const newValue = Number(e.target.value);
+                                            setInlineMarksEdits(prev => ({
+                                              ...prev,
+                                              [assignmentId]: {
+                                                ...prev[assignmentId],
+                                                [sid]: newValue
+                                              }
+                                            }));
+                                          }}
+                                          placeholder="Score"
+                                        />
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-8"
+                                          onClick={async () => {
+                                            try {
+                                              const maxScore = (a.total_marks as number) || 100;
+                                              const scoreValNum = Number(marksForAssignment[sid]);
+                                              if (!Number.isFinite(scoreValNum)) { alert('Enter a valid score'); return; }
+                                              await api.upsertMarks({
+                                                type: 'assignment',
+                                                ref_id: assignmentId,
+                                                student_id: sid,
+                                                score: scoreValNum,
+                                                max_score: maxScore,
+                                                remarks: '',
+                                                course_id: a.course_id || undefined,
+                                              });
+                                              alert('Marks saved successfully!');
+                                            } catch (e) { alert('Failed to save marks'); }
+                                          }}
+                                        >
+                                          Save
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-muted-foreground text-center py-4">
+                                No submissions yet for this assignment
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {(assignments || []).length === 0 && (
+                  <div className="text-sm text-muted-foreground text-center py-8">No assignments found.</div>
+                )}
+              </CardContent>
+            </Card>
+            <Card id="create-assignment-form">
               <CardHeader>
                 <CardTitle>New Assignment</CardTitle>
               </CardHeader>
@@ -1058,56 +1304,115 @@ case "upload":
     case "test":
         return (
           <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-foreground">Tests</h1>
+            <div className="flex items-center justify-between">
+              <h1 className="text-3xl font-bold text-foreground">Tests</h1>
+              <Button 
+                className="btn-primary"
+                onClick={() => {
+                  // Scroll to create test form
+                  const createForm = document.getElementById('create-test-form');
+                  createForm?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Test
+              </Button>
+            </div>
             <Card>
               <CardHeader>
                 <CardTitle>My Tests</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {(tests || []).map((t: any) => (
-                  <div key={t._id || t.id} className="p-3 border rounded-md flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{t.title || t.name || 'Test'}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Duration: {t.duration_minutes ?? '--'} min • Total Marks: {t.total_marks ?? 0}
+              <CardContent className="space-y-4">
+                {(tests || []).map((t: any) => {
+                  const testId = t._id || t.id;
+                  const isExpanded = expandedTests.has(testId);
+                  const scores = inlineTestScores[testId] || [];
+                  
+                  return (
+                    <div key={testId} className="border rounded-lg">
+                      {/* Test Header */}
+                      <div className="p-4 flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">{t.title || t.name || 'Test'}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Duration: {t.duration_minutes ?? '--'} min • Total Marks: {t.total_marks ?? 0}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            size="sm" 
+                            variant={isExpanded ? "secondary" : "default"}
+                            onClick={() => toggleTestScores(testId)}
+                          >
+                            {isExpanded ? 'Hide Scores' : 'View Scores'}
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                            onClick={async () => {
+                              if (confirm(`Are you sure you want to delete "${t.title || 'this test'}"? This action cannot be undone.`)) {
+                                try {
+                                  await api.deleteTest(testId);
+                                  // Refresh tests list
+                                  const res = await api.getTests();
+                                  const list = (res as any)?.data || (res as any) || [];
+                                  setTests(list);
+                                  alert('Test deleted successfully');
+                                } catch (error) {
+                                  console.error('Failed to delete test:', error);
+                                  alert('Failed to delete test');
+                                }
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
+                      
+                      {/* Inline Scores */}
+                      {isExpanded && (
+                        <div className="border-t bg-muted/20">
+                          <div className="p-4">
+                            <h4 className="font-medium mb-3 text-sm">Test Scores ({scores.length})</h4>
+                            {scores.length > 0 ? (
+                              <div className="space-y-3">
+                                {scores.map((score: any) => (
+                                  <div key={score._id} className="p-3 bg-background border rounded-md flex items-center justify-between gap-4">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-medium truncate">{score.student_id?.name || 'Student'}</div>
+                                      <div className="text-xs text-muted-foreground">{score.student_id?.email || ''}</div>
+                                      {score.remarks && (
+                                        <div className="text-xs text-muted-foreground mt-1">{score.remarks}</div>
+                                      )}
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-lg font-bold">{score.score ?? 0} / {score.max_score ?? 0}</div>
+                                      <div className="text-xs text-muted-foreground">
+                                        {score.max_score > 0 ? Math.round((score.score / score.max_score) * 100) : 0}%
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-muted-foreground text-center py-4">
+                                No scores available for this test
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <Button size="sm" onClick={() => setSelectedTestId(t._id || t.id)}>View Scores</Button>
-                  </div>
-                ))}
+                  );
+                })}
                 {(tests || []).length === 0 && (
-                  <div className="text-sm text-muted-foreground">No tests found.</div>
+                  <div className="text-sm text-muted-foreground text-center py-8">No tests found.</div>
                 )}
               </CardContent>
             </Card>
-            {selectedTestId && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Scores</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {(testMarks || []).map((it: any) => (
-                    <div key={it._id} className="p-3 border rounded-md flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">{it.student_id?.name || 'Student'}</div>
-                        <div className="text-xs text-muted-foreground">{it.student_id?.email || ''}</div>
-                        {it.remarks && <div className="text-xs text-muted-foreground">{it.remarks}</div>}
-                      </div>
-                      <div className="text-right">
-                        <div className="text-lg font-bold">{it.score ?? 0} / {it.max_score ?? 0}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {it.max_score > 0 ? Math.round((it.score / it.max_score) * 100) : 0}%
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {(testMarks || []).length === 0 && (
-                    <div className="text-sm text-muted-foreground">No scores found.</div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-            <Card>
+            <Card id="create-test-form">
               <CardHeader>
                 <CardTitle>New Test / Quiz</CardTitle>
               </CardHeader>
@@ -1279,6 +1584,29 @@ case "upload":
         }
         return <TeacherCoursesList onCourseSelect={setSelectedCourseId} />;
 
+      case "progress":
+        if (selectedProgressCourseId) {
+          return (
+            <div>
+              <Button 
+                variant="ghost" 
+                onClick={() => setSelectedProgressCourseId(null)}
+                className="mb-4"
+              >
+                ← Back to Course Selection
+              </Button>
+              <CourseProgress courseId={selectedProgressCourseId} />
+            </div>
+          );
+        }
+        return (
+          <div className="space-y-6">
+            <h1 className="text-3xl font-bold text-foreground">Student Progress</h1>
+            <p className="text-muted-foreground">Select a course to view detailed student progress</p>
+            <TeacherCoursesList onCourseSelect={setSelectedProgressCourseId} />
+          </div>
+        );
+
       case "meetings":
         return (
           <div className="space-y-6">
@@ -1314,11 +1642,23 @@ case "upload":
     }
   };
 
+  const handleSectionChange = (section: string) => {
+    setActiveSection(section);
+    // Reset progress course selection when leaving progress section
+    if (section !== "progress") {
+      setSelectedProgressCourseId(null);
+    }
+    // Reset main course selection when leaving courses section
+    if (section !== "courses") {
+      setSelectedCourseId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <RoleBasedHeader />
       <div className="flex">
-        <TeacherSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
+        <TeacherSidebar activeSection={activeSection} onSectionChange={handleSectionChange} />
         <main className="flex-1 p-8">
           {renderContent()}
         </main>

@@ -1,25 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import RoleBasedHeader from "@/components/layout/RoleBasedHeader";
 import Sidebar from "@/components/layout/Sidebar";
 import StatsCards from "@/components/dashboard/StatsCards";
 import CourseCard from "@/components/courses/CourseCard";
-import DiscussionCard from "@/components/discussions/DiscussionCard";
+// DiscussionCard removed - discussions now handled in course pages
 import AssignmentCard from "@/components/assignments/AssignmentCard";
 import NoticeBoard from "@/components/notices/NoticeBoard";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Plus, MessageCirclePlus } from "lucide-react";
+import { Plus, MessageCirclePlus, RefreshCw } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import UpcomingMeetings from "@/components/meetings/UpcomingMeetings";
 import StudentCoursesList from "@/components/courses/StudentCoursesList";
+import StudentProgress from "@/components/progress/StudentProgress";
 
 const StudentDashboard = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
   const { user } = useAuth();
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
-  const [courseDetailTab, setCourseDetailTab] = useState<"overview" | "resources" | "discussions">("overview");
+  const [courseDetailTab, setCourseDetailTab] = useState<"overview" | "resources">("overview");
   const [testActive, setTestActive] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -39,6 +40,59 @@ const StudentDashboard = () => {
   const [testUploadFile, setTestUploadFile] = useState<File | null>(null);
   const [testText, setTestText] = useState("");
   const [testLink, setTestLink] = useState("");
+
+  const [attendanceData, setAttendanceData] = useState<Record<string, { conducted: number; attended: number }>>({});
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [refreshingAttendance, setRefreshingAttendance] = useState(false);
+  const attendanceRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Dashboard stats state
+  const [studentStats, setStudentStats] = useState<{ enrolledCourses: number; completedAssignments: number; pendingAssignments: number; averageGrade: number } | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  const fetchAttendanceData = async (showLoading: boolean = true) => {
+    if (!user?._id || courses.length === 0) return;
+
+    if (showLoading) setLoadingAttendance(true);
+    setRefreshingAttendance(true);
+    try {
+      const attendanceDataMap: Record<string, { conducted: number; attended: number }> = {};
+
+      for (const course of courses) {
+        try {
+          const res = await api.getAttendanceSummary({ course_id: course.id });
+          const summary = (res as any)?.data || [];
+
+          const studentEntry = Array.isArray(summary)
+            ? summary.find((entry: any) => {
+                const student = entry.student;
+                const studentId = student?._id || student?.id || entry.student_id;
+                return studentId && studentId.toString() === user._id?.toString();
+              })
+            : null;
+
+          if (studentEntry) {
+            attendanceDataMap[course.id] = {
+              conducted: Number(studentEntry.total) || 0,
+              attended: Number(studentEntry.present) || 0,
+            };
+          } else {
+            attendanceDataMap[course.id] = { conducted: 0, attended: 0 };
+          }
+        } catch (error) {
+          console.error(`Failed to fetch attendance for course ${course.id}`, error);
+          attendanceDataMap[course.id] = { conducted: 0, attended: 0 };
+        }
+      }
+
+      setAttendanceData(attendanceDataMap);
+    } catch (error) {
+      console.error("Failed to fetch attendance data", error);
+    } finally {
+      if (showLoading) setLoadingAttendance(false);
+      setRefreshingAttendance(false);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       try {
@@ -50,16 +104,17 @@ const StudentDashboard = () => {
             ? (teacherObj.name || teacherObj.email || 'TBD')
             : (c.teacher_name || c.teacher || 'TBD');
           return {
-          id: c._id || c.id || String(idx + 1),
-          name: c.name || "Course",
-          teacher: teacherName,
-          progress: 0,
-          nextClass: "",
-          pendingAssignments: 0,
-          unreadMessages: 0,
-          resources: 0,
-          color: "bg-gradient-to-r from-blue-500 to-blue-600",
-        }});
+            id: c._id || c.id || String(idx + 1),
+            name: c.name || "Course",
+            teacher: teacherName,
+            progress: 0,
+            nextClass: "",
+            pendingAssignments: 0,
+            unreadMessages: 0,
+            resources: 0,
+            color: "bg-gradient-to-r from-blue-500 to-blue-600",
+          };
+        });
         setCourses(mapped);
       } catch (e) {
         setCourses([]);
@@ -141,58 +196,12 @@ const StudentDashboard = () => {
     }
   };
 
-  const discussions = [
-    {
-      id: "1",
-      title: "Confusion about Binary Search Trees implementation",
-      content: "I'm having trouble understanding the insertion logic in BST. Can someone explain the recursive approach?",
-      course: "DSA",
-      courseId: "1",
-      author: "Alex Kumar",
-      timeAgo: "2 hours ago",
-      replies: 8,
-      likes: 12,
-      isResolved: false,
-      tag: "Help Needed"
-    },
-    {
-      id: "2",
-      title: "SQL JOIN operations - Inner vs Outer joins",
-      content: "What's the practical difference between INNER JOIN and LEFT OUTER JOIN? When should we use each?",
-      course: "DBMS",
-      courseId: "2",
-      author: "Sarah Chen",
-      timeAgo: "4 hours ago",
-      replies: 15,
-      likes: 20,
-      isResolved: true,
-      tag: "Database"
-    }
-  ];
+  // Discussions data removed - now handled in individual course pages
 
-  // Mock resources per course
-  const courseResources: Record<string, { id: string; title: string; type: "pdf" | "video" | "link"; }[]> = {
-    "1": [
-      { id: "r1", title: "BST Lecture Notes.pdf", type: "pdf" },
-      { id: "r2", title: "Sorting Algorithms - Video", type: "video" },
-      { id: "r3", title: "DSA Cheatsheet", type: "link" },
-    ],
-    "2": [
-      { id: "r4", title: "SQL Joins Guide.pdf", type: "pdf" },
-      { id: "r5", title: "Normalization Tutorial", type: "link" },
-    ],
-    "3": [
-      { id: "r6", title: "OSI vs TCP/IP - Video", type: "video" },
-      { id: "r7", title: "Subnetting Workbook.pdf", type: "pdf" },
-    ],
-  };
+  // Course resources will be fetched from backend
+  const [courseResources, setCourseResources] = useState<Record<string, any[]>>({});
 
-  // Mock attendance data per course
-  const attendanceByCourse: { courseId: string; conducted: number; attended: number }[] = [
-    { courseId: "1", conducted: 32, attended: 28 },
-    { courseId: "2", conducted: 30, attended: 24 },
-    { courseId: "3", conducted: 26, attended: 22 },
-  ];
+
 
   // Timetable for students (fetched from backend)
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
@@ -255,6 +264,62 @@ const StudentDashboard = () => {
     setAssignDialogOpen(!!found);
   };
 
+  useEffect(() => {
+    if (activeSection !== "attendance") {
+      if (attendanceRefreshIntervalRef.current) {
+        clearInterval(attendanceRefreshIntervalRef.current);
+        attendanceRefreshIntervalRef.current = null;
+      }
+      return;
+    }
+
+    fetchAttendanceData(true);
+
+    attendanceRefreshIntervalRef.current = setInterval(() => {
+      fetchAttendanceData(false);
+    }, 15000);
+
+    return () => {
+      if (attendanceRefreshIntervalRef.current) {
+        clearInterval(attendanceRefreshIntervalRef.current);
+        attendanceRefreshIntervalRef.current = null;
+      }
+    };
+  }, [activeSection, courses, user?._id]);
+
+  // Load student stats for dashboard
+  useEffect(() => {
+    if (activeSection === "dashboard" && user?._id) {
+      const loadStats = async () => {
+        setLoadingStats(true);
+        try {
+          const res = await api.getStudentStats(user._id);
+          setStudentStats((res as any)?.data || { enrolledCourses: 0, completedAssignments: 0, pendingAssignments: 0, averageGrade: 0 });
+        } catch (e) {
+          console.error('Failed to load student stats:', e);
+          setStudentStats({ enrolledCourses: 0, completedAssignments: 0, pendingAssignments: 0, averageGrade: 0 });
+        } finally {
+          setLoadingStats(false);
+        }
+      };
+      loadStats();
+    }
+  }, [activeSection, user?._id]);
+
+  // Load course resources when needed
+  const loadCourseResources = async (courseId: string) => {
+    if (courseResources[courseId]) return; // Already loaded
+    
+    try {
+      const res = await api.getCourseResources(courseId);
+      const resources = (res as any)?.data || [];
+      setCourseResources(prev => ({ ...prev, [courseId]: resources }));
+    } catch (e) {
+      console.error('Failed to load course resources:', e);
+      setCourseResources(prev => ({ ...prev, [courseId]: [] }));
+    }
+  };
+
   const renderContent = () => {
     switch (activeSection) {
       case "dashboard":
@@ -265,25 +330,36 @@ const StudentDashboard = () => {
               <p className="text-muted-foreground">Welcome back! Here's your academic overview.</p>
             </div>
             
-            <StatsCards />
+            <StatsCards studentStats={studentStats} loading={loadingStats} />
             
             <div className="grid lg:grid-cols-3 gap-8">
               <div>
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-semibold">Recent Discussions</h2>
-                  <Button size="sm" className="btn-primary">
-                    <MessageCirclePlus className="h-4 w-4 mr-2" />
-                    Ask Question
+                  <h2 className="text-xl font-semibold">My Courses</h2>
+                  <Button size="sm" className="btn-primary" onClick={() => setActiveSection("courses")}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    View All
                   </Button>
                 </div>
                 <div className="space-y-4">
-                  {discussions.slice(0, 2).map((discussion) => (
-                    <DiscussionCard
-                      key={discussion.id}
-                      discussion={discussion}
-                      onDiscussionClick={handleDiscussionClick}
-                    />
+                  {courses.slice(0, 3).map((course) => (
+                    <div key={course.id} className="p-4 border rounded-lg hover:bg-accent/50 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-medium">{course.name}</h3>
+                          <p className="text-sm text-muted-foreground">Teacher: {course.teacher}</p>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => setActiveSection("courses")}>
+                          View
+                        </Button>
+                      </div>
+                    </div>
                   ))}
+                  {courses.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No courses enrolled yet
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -317,28 +393,10 @@ const StudentDashboard = () => {
       case "courses":
         return <StudentCoursesList />;
         
-      case "discussions":
-        return (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h1 className="text-3xl font-bold text-foreground">Discussions</h1>
-              <Button className="btn-primary">
-                <Plus className="h-4 w-4 mr-2" />
-                Start Discussion
-              </Button>
-            </div>
-            
-            <div className="space-y-4">
-              {discussions.map((discussion) => (
-                <DiscussionCard
-                  key={discussion.id}
-                  discussion={discussion}
-                  onDiscussionClick={handleDiscussionClick}
-                />
-              ))}
-            </div>
-          </div>
-        );
+      case "progress":
+        return <StudentProgress />;
+        
+      // Discussions removed - now handled within individual course pages
         
       case "assignments":
         return (
@@ -403,29 +461,55 @@ const StudentDashboard = () => {
         return (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h1 className="text-3xl font-bold text-foreground">Attendance</h1>
-              <p className="text-muted-foreground">Course-wise attendance and overall</p>
+              <div>
+                <h1 className="text-3xl font-bold text-foreground">Attendance</h1>
+                <p className="text-muted-foreground">Course-wise attendance and overall</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fetchAttendanceData(false)}
+                disabled={refreshingAttendance}
+                className="gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshingAttendance ? "animate-spin" : ""}`} />
+                {refreshingAttendance ? "Refreshing..." : "Refresh"}
+              </Button>
             </div>
-            {(() => {
-              const totals = attendanceByCourse.reduce(
-                (acc, a) => ({ conducted: acc.conducted + a.conducted, attended: acc.attended + a.attended }),
-                { conducted: 0, attended: 0 }
-              );
-              const overall = totals.conducted ? Math.round((totals.attended / totals.conducted) * 100) : 0;
-              return (
+            {loadingAttendance ? (
+              <div className="p-6 rounded-lg border text-center text-sm text-muted-foreground">
+                Loading attendance data...
+              </div>
+            ) : (
+              <>
                 <div className="p-4 rounded-lg border">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-sm text-muted-foreground">Overall Attendance</span>
-                    <span className="text-2xl font-bold">{overall}%</span>
+                    <span className="text-2xl font-bold">
+                      {(() => {
+                        const totals = Object.values(attendanceData).reduce(
+                          (acc, a) => ({ conducted: acc.conducted + a.conducted, attended: acc.attended + a.attended }),
+                          { conducted: 0, attended: 0 }
+                        );
+                        const overall = totals.conducted ? Math.round((totals.attended / totals.conducted) * 100) : 0;
+                        return `${overall}%`;
+                      })()}
+                    </span>
                   </div>
                   <div className="relative h-56">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={[
-                            { name: "Attended", value: totals.attended },
-                            { name: "Absent", value: Math.max(0, totals.conducted - totals.attended) },
-                          ]}
+                          data={(() => {
+                            const totals = Object.values(attendanceData).reduce(
+                              (acc, a) => ({ conducted: acc.conducted + a.conducted, attended: acc.attended + a.attended }),
+                              { conducted: 0, attended: 0 }
+                            );
+                            return [
+                              { name: "Attended", value: totals.attended },
+                              { name: "Absent", value: Math.max(0, totals.conducted - totals.attended) },
+                            ];
+                          })()}
                           dataKey="value"
                           nameKey="name"
                           innerRadius={70}
@@ -441,94 +525,102 @@ const StudentDashboard = () => {
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="text-3xl font-bold">{overall}%</div>
-                        <div className="text-xs text-muted-foreground">{totals.attended}/{totals.conducted} classes</div>
-                      </div>
+                      {(() => {
+                        const totals = Object.values(attendanceData).reduce(
+                          (acc, a) => ({ conducted: acc.conducted + a.conducted, attended: acc.attended + a.attended }),
+                          { conducted: 0, attended: 0 }
+                        );
+                        const overall = totals.conducted ? Math.round((totals.attended / totals.conducted) * 100) : 0;
+                        return (
+                          <div className="text-center">
+                            <div className="text-3xl font-bold">{overall}%</div>
+                            <div className="text-xs text-muted-foreground">{totals.attended}/{totals.conducted} classes</div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
-              );
-            })()}
-            <div className="p-4 rounded-lg border">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Attendance by Course</h2>
-                <span className="text-xs text-muted-foreground">Donut visualization</span>
-              </div>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {attendanceByCourse.map((a) => {
-                  const course = courses.find(c => c.id === a.courseId);
-                  const name = (course?.name || `Course ${a.courseId}`).split(" ")[0];
-                  const attended = a.attended;
-                  const total = a.conducted;
-                  const absent = Math.max(0, total - attended);
-                  const pct = total ? Math.round((attended / total) * 100) : 0;
-                  return (
-                    <div key={a.courseId} className="relative h-48 rounded-md border">
-                      <div className="absolute top-2 left-2 text-sm font-medium">{name}</div>
-                      <div className="absolute inset-0 pt-6">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={[
-                                { name: "Attended", value: attended },
-                                { name: "Absent", value: absent },
-                              ]}
-                              dataKey="value"
-                              nameKey="name"
-                              innerRadius={55}
-                              outerRadius={70}
-                              startAngle={90}
-                              endAngle={-270}
-                              stroke="transparent"
-                            >
-                              <Cell key="attended" fill="#6366F1" />
-                              <Cell key="absent" fill="#e5e7eb" />
-                            </Pie>
-                            <Tooltip formatter={(value: any, name: any) => [value as number, name]} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">{pct}%</div>
-                            <div className="text-xs text-muted-foreground">{attended}/{total}</div>
+
+                <div className="p-4 rounded-lg border">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold">Attendance by Course</h2>
+                    <span className="text-xs text-muted-foreground">Donut visualization</span>
+                  </div>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {courses.map((course) => {
+                      const data = attendanceData[course.id] || { conducted: 0, attended: 0 };
+                      const absent = Math.max(0, data.conducted - data.attended);
+                      const pct = data.conducted ? Math.round((data.attended / data.conducted) * 100) : 0;
+                      return (
+                        <div key={course.id} className="relative h-48 rounded-md border">
+                          <div className="absolute top-2 left-2 text-sm font-medium">{course.name.split(" ")[0]}</div>
+                          <div className="absolute inset-0 pt-6">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={[
+                                    { name: "Attended", value: data.attended },
+                                    { name: "Absent", value: absent },
+                                  ]}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  innerRadius={55}
+                                  outerRadius={70}
+                                  startAngle={90}
+                                  endAngle={-270}
+                                  stroke="transparent"
+                                >
+                                  <Cell key="attended" fill="#6366F1" />
+                                  <Cell key="absent" fill="#e5e7eb" />
+                                </Pie>
+                                <Tooltip formatter={(value: any, name: any) => [value as number, name]} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="text-center">
+                                <div className="text-2xl font-bold">{pct}%</div>
+                                <div className="text-xs text-muted-foreground">{data.attended}/{data.conducted}</div>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <details className="rounded-lg border p-4">
-              <summary className="cursor-pointer text-sm text-muted-foreground">View detailed attendance table</summary>
-              <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-accent/50">
-                    <tr>
-                      <th className="text-left p-3">Course</th>
-                      <th className="text-left p-3">Classes Conducted</th>
-                      <th className="text-left p-3">Classes Attended</th>
-                      <th className="text-left p-3">Percentage</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {attendanceByCourse.map((a) => {
-                      const course = courses.find(c => c.id === a.courseId);
-                      const pct = a.conducted ? Math.round((a.attended / a.conducted) * 100) : 0;
-                      return (
-                        <tr key={a.courseId} className="border-t">
-                          <td className="p-3">{course?.name || `Course ${a.courseId}`}</td>
-                          <td className="p-3">{a.conducted}</td>
-                          <td className="p-3">{a.attended}</td>
-                          <td className="p-3 font-medium">{pct}%</td>
-                        </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            </details>
+                  </div>
+                </div>
+
+                <details className="rounded-lg border p-4">
+                  <summary className="cursor-pointer text-sm text-muted-foreground">View detailed attendance table</summary>
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-accent/50">
+                        <tr>
+                          <th className="text-left p-3">Course</th>
+                          <th className="text-left p-3">Classes Conducted</th>
+                          <th className="text-left p-3">Classes Attended</th>
+                          <th className="text-left p-3">Percentage</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {courses.map((course) => {
+                          const data = attendanceData[course.id] || { conducted: 0, attended: 0 };
+                          const pct = data.conducted ? Math.round((data.attended / data.conducted) * 100) : 0;
+                          return (
+                            <tr key={course.id} className="border-t">
+                              <td className="p-3">{course.name}</td>
+                              <td className="p-3">{data.conducted}</td>
+                              <td className="p-3">{data.attended}</td>
+                              <td className="p-3 font-medium">{pct}%</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              </>
+            )}
           </div>
         );
 

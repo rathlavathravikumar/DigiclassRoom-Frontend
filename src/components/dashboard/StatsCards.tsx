@@ -1,37 +1,47 @@
-import { TrendingUp, TrendingDown, Clock, Target } from "lucide-react";
+import { TrendingUp, TrendingDown, Clock, Target, BookOpen, CheckSquare } from "lucide-react";
 
-const StatsCards = () => {
+interface StatsCardsProps {
+  studentStats?: {
+    enrolledCourses: number;
+    completedAssignments: number;
+    pendingAssignments: number;
+    averageGrade: number;
+  } | null;
+  loading?: boolean;
+}
+
+const StatsCards = ({ studentStats, loading = false }: StatsCardsProps) => {
   const stats = [
     {
-      title: "Attendance",
-      value: "89.5%",
-      change: "+2.1%",
+      title: "Enrolled Courses",
+      value: loading ? "..." : (studentStats?.enrolledCourses?.toString() || "0"),
+      change: "Active courses",
       trend: "up",
-      icon: Clock,
-      color: "success"
-    },
-    {
-      title: "Overall Grade",
-      value: "85.2%",
-      change: "+5.3%",
-      trend: "up", 
-      icon: Target,
+      icon: BookOpen,
       color: "primary"
     },
     {
+      title: "Average Grade",
+      value: loading ? "..." : `${studentStats?.averageGrade || 0}%`,
+      change: "Overall performance",
+      trend: "up", 
+      icon: Target,
+      color: "success"
+    },
+    {
       title: "Pending Assignments",
-      value: "4",
-      change: "-2",
+      value: loading ? "..." : (studentStats?.pendingAssignments?.toString() || "0"),
+      change: "Need completion",
       trend: "down",
       icon: TrendingDown,
       color: "warning"
     },
     {
-      title: "Completed Tests",
-      value: "12/15",
-      change: "+3",
+      title: "Completed Assignments",
+      value: loading ? "..." : (studentStats?.completedAssignments?.toString() || "0"),
+      change: "Submitted work",
       trend: "up",
-      icon: TrendingUp,
+      icon: CheckSquare,
       color: "success"
     }
   ];
@@ -66,13 +76,8 @@ const StatsCards = () => {
               </div>
             </div>
             <div className="mt-4 flex items-center">
-              <span className={`text-sm font-medium ${
-                isPositive ? 'text-success' : 'text-destructive'
-              }`}>
+              <span className="text-sm text-muted-foreground">
                 {stat.change}
-              </span>
-              <span className="text-sm text-muted-foreground ml-2">
-                from last month
               </span>
             </div>
           </div>

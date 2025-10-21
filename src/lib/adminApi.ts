@@ -12,6 +12,8 @@ export const adminApi = {
     http.post("/api/v1/admin/users/student", payload).then(r => r.data),
   listUsers: (role?: "teacher" | "student") =>
     http.get("/api/v1/admin/users", { params: role ? { role } : undefined }).then(r => r.data),
+  deleteUser: (userId: string, role: "teacher" | "student") =>
+    http.delete(`/api/v1/admin/users/${userId}`, { params: { role } }).then(r => r.data),
 
   // Courses
   listCourses: (params?: { teacher_id?: string }) =>

@@ -20,11 +20,13 @@ import {
   Edit
 } from "lucide-react";
 import { adminApi } from "@/lib/adminApi";
+import { api } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import AdminCourseList from "@/components/courses/AdminCourseList";
 import AdminCourseForm from "@/components/courses/AdminCourseForm";
 import AdminCourseDetail from "@/components/courses/AdminCourseDetail";
+import AdminProgressDashboard from "@/components/progress/AdminProgressDashboard";
 import { toast } from "sonner";
 
 const AdminDashboard = () => {
@@ -44,6 +46,9 @@ const AdminDashboard = () => {
   const [noticeFilter, setNoticeFilter] = useState<'all' | 'students' | 'teachers'>('all');
   const [openCreateNotice, setOpenCreateNotice] = useState(false);
   const [noticeForm, setNoticeForm] = useState<{ title: string; content: string; priority: 'normal' | 'important' | 'urgent'; target: 'all' | 'students' | 'teachers' }>({ title: '', content: '', priority: 'normal', target: 'all' });
+  // Dashboard stats state
+  const [dashboardStats, setDashboardStats] = useState<{ totalStudents: number; totalTeachers: number; totalCourses: number; totalNotices: number } | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
 
   const displayUsers = ((): any[] => {
     if (userFilter === "teacher") return teachersData.map(t => ({ ...t, role: "teacher" }));
@@ -97,49 +102,74 @@ const AdminDashboard = () => {
     }
   }, [userFilter]);
 
+  // Load dashboard stats
+  useEffect(() => {
+    if (activeSection === "dashboard") {
+      const loadStats = async () => {
+        setLoadingStats(true);
+        try {
+          const res = await api.getAdminStats();
+          setDashboardStats((res as any)?.data || { totalStudents: 0, totalTeachers: 0, totalCourses: 0, totalNotices: 0 });
+        } catch (e) {
+          console.error('Failed to load admin stats:', e);
+          setDashboardStats({ totalStudents: 0, totalTeachers: 0, totalCourses: 0, totalNotices: 0 });
+        } finally {
+          setLoadingStats(false);
+        }
+      };
+      loadStats();
+    }
+  }, [activeSection]);
+
+  // Load recent courses for dashboard
+  useEffect(() => {
+    if (activeSection === "dashboard") {
+      const loadRecentCourses = async () => {
+        try {
+          const res = await adminApi.listCourses();
+          const courses = (res as any)?.data || [];
+          setRecentCourses(courses.slice(0, 3)); // Show only first 3 for dashboard
+        } catch (e) {
+          setRecentCourses([]);
+        }
+      };
+      loadRecentCourses();
+    }
+  }, [activeSection]);
+
   const adminStats = [
     {
       title: "Total Students",
-      value: "1,247",
-      change: "+12% this month",
+      value: dashboardStats?.totalStudents?.toString() || "0",
+      change: "Enrolled students",
       icon: Users,
       color: "primary"
     },
     {
       title: "Active Teachers",
-      value: "67",
-      change: "+3 new this week",
+      value: dashboardStats?.totalTeachers?.toString() || "0",
+      change: "Teaching staff",
       icon: UserPlus,
       color: "success"
     },
     {
       title: "Active Courses",
-      value: "45",
+      value: dashboardStats?.totalCourses?.toString() || "0",
       change: "Across all departments",
       icon: BookOpen,
       color: "warning"
     },
     {
       title: "System Notices",
-      value: "8",
+      value: dashboardStats?.totalNotices?.toString() || "0",
       change: "Active announcements",
       icon: Bell,
       color: "success"
     }
   ];
 
-  const users = [
-    { id: "1", name: "John Doe", email: "john@edu.com", role: "Student", class: "E3-S1", status: "Active" },
-    { id: "2", name: "Dr. Sarah Smith", email: "sarah@edu.com", role: "Teacher", department: "CS", status: "Active" },
-    { id: "3", name: "Mike Johnson", email: "mike@edu.com", role: "Student", class: "E3-S1", status: "Inactive" },
-    { id: "4", name: "Prof. Brown", email: "brown@edu.com", role: "Teacher", department: "IT", status: "Active" }
-  ];
-
-  const courses = [
-    { id: "1", name: "Data Structures & Algorithms", teacher: "Dr. Smith", students: 45, status: "Active" },
-    { id: "2", name: "Database Management", teacher: "Prof. Johnson", students: 50, status: "Active" },
-    { id: "3", name: "Computer Networks", teacher: "Dr. Brown", students: 48, status: "Active" }
-  ];
+  // Recent users will be fetched from displayUsers function
+  const [recentCourses, setRecentCourses] = useState<any[]>([]);
 
   // Mock course plans (by courseId)
   const coursePlans: Record<string, { week: number; topic: string; resources?: string; assessment?: string }[]> = {
@@ -259,22 +289,27 @@ const AdminDashboard = () => {
                   </Button>
                 </div>
                 <div className="space-y-3">
-                  {users.slice(0, 4).map((user) => (
-                    <div key={user.id} className="card-academic p-4 flex items-center justify-between">
+                  {displayUsers.slice(0, 4).map((user) => (
+                    <div key={user._id || user.id} className="card-academic p-4 flex items-center justify-between">
                       <div>
                         <p className="font-medium">{user.name}</p>
                         <p className="text-sm text-muted-foreground">{user.email}</p>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Badge className={user.role === 'Student' ? 'bg-primary/10 text-primary' : 'bg-success/10 text-success'}>
-                          {user.role}
+                        <Badge className={user.role === 'student' ? 'bg-primary/10 text-primary' : 'bg-success/10 text-success'}>
+                          {user.role === 'student' ? 'Student' : 'Teacher'}
                         </Badge>
-                        <Badge className={user.status === 'Active' ? 'status-present' : 'bg-muted text-muted-foreground'}>
-                          {user.status}
+                        <Badge className="status-present">
+                          Active
                         </Badge>
                       </div>
                     </div>
                   ))}
+                  {displayUsers.length === 0 && (
+                    <div className="text-sm text-muted-foreground text-center py-4">
+                      {loadingStats ? "Loading users..." : "No users found"}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -334,6 +369,9 @@ const AdminDashboard = () => {
             />
           </div>
         );
+
+      case "progress":
+        return <AdminProgressDashboard />;
 
       case "timetable":
         return (
@@ -548,7 +586,23 @@ const AdminDashboard = () => {
                         <Button size="sm" variant="outline">
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="outline" className="text-destructive">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          onClick={async () => {
+                            if (confirm(`Are you sure you want to delete ${u.name}? This action cannot be undone.`)) {
+                              try {
+                                await adminApi.deleteUser(u._id || u.id, u.role);
+                                await refreshUsers();
+                                toast.success(`${u.role === 'student' ? 'Student' : 'Teacher'} deleted successfully`);
+                              } catch (error) {
+                                console.error('Failed to delete user:', error);
+                                toast.error('Failed to delete user');
+                              }
+                            }
+                          }}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -650,15 +704,23 @@ const AdminDashboard = () => {
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setOpenCreateNotice(false)}>Cancel</Button>
                     <Button onClick={async () => {
-                      if (!noticeForm.title || !noticeForm.content) return;
+                      if (!noticeForm.title || !noticeForm.content) {
+                        toast.error('Please fill in all required fields');
+                        return;
+                      }
                       try {
-                        await adminApi.createNotice(noticeForm);
+                        console.log('Creating notice with form data:', noticeForm);
+                        const result = await adminApi.createNotice(noticeForm);
+                        console.log('Notice creation result:', result);
                         setOpenCreateNotice(false);
                         setNoticeForm({ title: '', content: '', priority: 'normal', target: 'all' });
                         const res = await adminApi.listNotices(noticeFilter !== 'all' ? { target: noticeFilter } as any : undefined);
                         setNotices((res as any)?.data || (res as any) || []);
-                        toast.success('Notice created');
-                      } catch (_) { toast.error('Failed to create'); }
+                        toast.success('Notice created successfully');
+                      } catch (error) { 
+                        console.error('Failed to create notice:', error);
+                        toast.error(`Failed to create notice: ${error.response?.data?.message || error.message || 'Unknown error'}`);
+                      }
                     }}>Create</Button>
                   </DialogFooter>
                 </DialogContent>

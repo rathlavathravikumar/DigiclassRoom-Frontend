@@ -26,7 +26,6 @@ const navigation = [
   { name: "Assignment", icon: ClipboardList, id: "assignment" },
   { name: "Test", icon: TestTube, id: "test" },
   { name: "Manage Attendance", icon: CheckSquare, id: "attendance" },
-  { name: "Discussions", icon: MessageCircle, id: "discussions" },
   { name: "Course Plan", icon: FileText, id: "course-plan" },
   { name: "Student Progress", icon: Users, id: "progress" },
   { name: "Resources", icon: Upload, id: "resources" },

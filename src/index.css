@@ -192,4 +192,58 @@
   .status-grade {
     @apply bg-primary/10 text-primary border border-primary/20 rounded-full px-3 py-1 text-xs font-medium;
   }
+
+  /* Modern dashboard enhancements */
+  .dashboard-card {
+    @apply bg-card border border-border rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1;
+  }
+
+  .dashboard-card-hover {
+    @apply hover:border-primary/20 hover:shadow-lg;
+  }
+
+  .action-button {
+    @apply group relative overflow-hidden rounded-xl border transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5;
+  }
+
+  .action-button-gradient {
+    @apply bg-gradient-to-br hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300;
+  }
+
+  /* Responsive grid improvements */
+  @media (max-width: 1366px) {
+    .dashboard-responsive {
+      @apply px-4 py-6;
+    }
+    
+    .stats-grid-responsive {
+      @apply grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4;
+    }
+    
+    .main-grid-responsive {
+      @apply grid-cols-1 lg:grid-cols-12 gap-6;
+    }
+  }
+
+  /* Smooth animations */
+  .smooth-hover {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .scale-hover {
+    @apply hover:scale-105 transition-transform duration-200;
+  }
+
+  /* Modern scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-muted/30 rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30 rounded-full hover:bg-muted-foreground/50;
+  }
 }
