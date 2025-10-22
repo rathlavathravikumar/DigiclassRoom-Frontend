@@ -48,8 +48,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (token) {
           // Try admin me first (current scope is admin-only flow)
           const resp = await adminApi.me();
-          const u = (resp as any)?.data?.user;
-          if (u) setUser({ ...u, role: 'admin' });
+          const u = (resp as any)?.data?.user || (resp as any)?.data;
+          if (u) {
+            const userData = {
+              ...u,
+              role: 'admin',
+              name: u.name || u.username || u.fullName || u.email?.split('@')[0] || 'Admin'
+            };
+            setUser(userData as User);
+          }
         }
       } catch (_) {
         clearTokens();
@@ -69,12 +76,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (tokens?.accessToken) {
         setTokens(tokens.accessToken, tokens.refreshToken);
         const me = await api.teacherMe();
-        const u = (me as any)?.data?.user;
-        if (u) setUser({ ...u, role: 'teacher' });
+        const u = (me as any)?.data?.user || (me as any)?.data;
+        if (u) {
+          const userData = {
+            ...u,
+            role: 'teacher',
+            name: u.name || u.username || u.fullName || email.split('@')[0]
+          };
+          console.log('Teacher user data:', userData);
+          setUser(userData as User);
+        }
         setIsLoading(false);
         return true;
       }
-    } catch (_) {}
+    } catch (err) {
+      console.error('Teacher login error:', err);
+    }
     setIsLoading(false);
     return false;
   };
@@ -88,12 +105,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (tokens?.accessToken) {
         setTokens(tokens.accessToken, tokens.refreshToken);
         const me = await api.studentMe();
-        const u = (me as any)?.data?.user;
-        if (u) setUser({ ...u, role: 'student' });
+        const u = (me as any)?.data?.user || (me as any)?.data;
+        if (u) {
+          const userData = {
+            ...u,
+            role: 'student',
+            name: u.name || u.username || u.fullName || email.split('@')[0]
+          };
+          console.log('Student user data:', userData);
+          setUser(userData as User);
+        }
         setIsLoading(false);
         return true;
       }
-    } catch (_) {}
+    } catch (err) {
+      console.error('Student login error:', err);
+    }
     setIsLoading(false);
     return false;
   };
@@ -112,7 +139,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data?.accessToken) {
         setTokens(data.accessToken, data.refreshToken);
         const admin = data.admin;
-        if (admin) setUser({ ...admin, role: 'admin' });
+        if (admin) {
+          const userData = {
+            ...admin,
+            role: 'admin',
+            name: admin.name || payload.name
+          };
+          setUser(userData as User);
+        }
         setIsLoading(false);
         return true;
       }
@@ -130,12 +164,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTokens(data.accessToken, data.refreshToken);
         // fetch me to populate user
         const me = await adminApi.me();
-        const u = (me as any)?.data?.user;
-        if (u) setUser({ ...u, role: 'admin' });
+        const u = (me as any)?.data?.user || (me as any)?.data;
+        if (u) {
+          const userData = {
+            ...u,
+            role: 'admin',
+            name: u.name || u.username || u.fullName || email.split('@')[0]
+          };
+          console.log('Admin user data:', userData);
+          setUser(userData as User);
+        }
         setIsLoading(false);
         return true;
       }
-    } catch (_) {}
+    } catch (err) {
+      console.error('Admin login error:', err);
+    }
     setIsLoading(false);
     return false;
   };

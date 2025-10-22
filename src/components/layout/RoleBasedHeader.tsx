@@ -1,4 +1,4 @@
-import { Bell, Search, User, LogOut, Settings } from "lucide-react";
+import { Search, User, LogOut, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
+import NotificationDropdown from "@/components/notifications/NotificationDropdown";
 
 const RoleBasedHeader = () => {
   const { user, logout } = useAuth();
@@ -30,9 +31,9 @@ const RoleBasedHeader = () => {
   const getRoleTitle = () => {
     switch (user?.role) {
       case 'student':
-        return `${user.class} Student`;
+        return user.class_id ? `${user.class_id} Student` : 'Student';
       case 'teacher':
-        return `${user.department} Faculty`;
+        return user.department ? `${user.department} Faculty` : 'Faculty';
       case 'admin':
         return 'System Administrator';
       default:
@@ -65,12 +66,7 @@ const RoleBasedHeader = () => {
         </div>
 
         <div className="flex items-center space-x-3">
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-5 w-5" />
-            <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-warning text-warning-foreground text-xs">
-              3
-            </Badge>
-          </Button>
+          <NotificationDropdown />
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

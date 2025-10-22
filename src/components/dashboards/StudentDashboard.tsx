@@ -8,10 +8,12 @@ import AssignmentCard from "@/components/assignments/AssignmentCard";
 import NoticeBoard from "@/components/notices/NoticeBoard";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Plus, MessageCirclePlus, RefreshCw, Calendar, Trophy, TrendingUp, TrendingDown, CheckCircle, XCircle, ArrowUpDown, BarChart3, Award } from "lucide-react";
+import { Plus, MessageCirclePlus, RefreshCw, Calendar, Trophy, TrendingUp, TrendingDown, CheckCircle, XCircle, ArrowUpDown, BarChart3, Award, X, Clock, AlertCircle } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNotifications } from "@/contexts/NotificationContext";
+import { useNotificationWatcher } from "@/hooks/useNotificationWatcher";
 import UpcomingMeetings from "@/components/meetings/UpcomingMeetings";
 import StudentCoursesList from "@/components/courses/StudentCoursesList";
 import StudentProgress from "@/components/progress/StudentProgress";
@@ -19,6 +21,10 @@ import StudentProgress from "@/components/progress/StudentProgress";
 const StudentDashboard = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
   const { user } = useAuth();
+  const { addNotification } = useNotifications();
+  
+  // Enable notification watching for new assignments and tests
+  useNotificationWatcher();
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [courseDetailTab, setCourseDetailTab] = useState<"overview" | "resources">("overview");
   const [testActive, setTestActive] = useState(false);
@@ -671,6 +677,17 @@ const StudentDashboard = () => {
                         } else {
                           await api.submitWork({ type: 'assignment', ref_id: selectedAssignmentForSubmit.id, text: assignText || undefined, link: assignLink || undefined });
                         }
+                        
+                        // Add notification for teacher (stored locally, will be seen by teacher of this course)
+                        addNotification({
+                          type: 'submission',
+                          title: 'New Assignment Submission',
+                          message: `${user?.name || 'A student'} submitted "${selectedAssignmentForSubmit.title}"`,
+                          relatedId: selectedAssignmentForSubmit.id,
+                          relatedName: selectedAssignmentForSubmit.title,
+                          studentName: user?.name || user?.email
+                        });
+                        
                         alert('Assignment submitted');
                         setAssignDialogOpen(false);
                         // Refresh assignments list to show updated status
@@ -959,13 +976,153 @@ const StudentDashboard = () => {
         );
 
       case "tests":
+        // If test is active, show ONLY the test page (no list, no statistics)
+        if (testActive && currentTest) {
+          return (
+            <div className="space-y-6 max-w-5xl mx-auto">
+              {/* Test Header with Timer */}
+              <div className="flex items-center justify-between p-6 rounded-lg border bg-gradient-to-r from-primary/10 to-primary/5">
+                <div>
+                  <h1 className="text-3xl font-bold text-foreground mb-2">{currentTest.title}</h1>
+                  <p className="text-sm text-muted-foreground">
+                    {currentTest.description || 'Answer all questions to the best of your ability'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <div className="text-sm text-muted-foreground flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      Time Remaining
+                    </div>
+                    <div className={`text-3xl font-bold tabular-nums ${
+                      timeLeft < 300 ? 'text-red-600 animate-pulse' : 'text-primary'
+                    }`}>
+                      {Math.floor(timeLeft/60).toString().padStart(2,'0')}:{(timeLeft%60).toString().padStart(2,'0')}
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm('Are you sure you want to exit the test? Your progress will not be saved.')) {
+                        setTestActive(false);
+                        setCurrentTest(null);
+                        setSelectedAnswers({});
+                      }
+                    }}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Exit Test
+                  </Button>
+                </div>
+              </div>
+
+              {/* Test Info Card */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 rounded-lg border bg-accent/30">
+                  <div className="text-sm text-muted-foreground">Total Questions</div>
+                  <div className="text-2xl font-bold text-foreground">{currentTest.questions?.length || 0}</div>
+                </div>
+                <div className="p-4 rounded-lg border bg-accent/30">
+                  <div className="text-sm text-muted-foreground">Total Marks</div>
+                  <div className="text-2xl font-bold text-foreground">{currentTest.total_marks || 0}</div>
+                </div>
+                <div className="p-4 rounded-lg border bg-accent/30">
+                  <div className="text-sm text-muted-foreground">Answered</div>
+                  <div className="text-2xl font-bold text-primary">
+                    {Object.keys(selectedAnswers).length} / {currentTest.questions?.length || 0}
+                  </div>
+                </div>
+              </div>
+
+              {/* Time Warning */}
+              {timeLeft < 300 && timeLeft > 0 && (
+                <div className="flex items-center gap-3 p-4 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20">
+                  <AlertCircle className="h-5 w-5 text-red-600" />
+                  <div className="text-sm text-red-600 dark:text-red-400 font-medium">
+                    Warning: Less than 5 minutes remaining!
+                  </div>
+                </div>
+              )}
+
+              {/* Questions */}
+              <div className="space-y-6">
+                {(currentTest?.questions || []).map((q: any, idx: number) => (
+                  <div key={idx} className="p-6 rounded-lg border bg-card shadow-sm">
+                    <div className="flex items-start gap-3 mb-4">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary">
+                        {idx + 1}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-semibold text-lg text-foreground mb-1">{q.question}</div>
+                        <div className="text-xs text-muted-foreground">Marks: {q.marks || 1}</div>
+                      </div>
+                      {selectedAnswers[String(idx)] !== undefined && (
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                      )}
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {(q.options || []).map((opt: string, i: number) => {
+                        const isSelected = selectedAnswers[String(idx)] === i;
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => setSelectedAnswers(s => ({ ...s, [String(idx)]: i }))}
+                            className={`text-left px-4 py-3 rounded-lg border-2 transition-all ${
+                              isSelected
+                                ? 'border-primary bg-primary text-primary-foreground shadow-md'
+                                : 'border-border hover:border-primary/50 hover:bg-accent'
+                            }`}
+                          >
+                            <span className="font-semibold mr-2">{letters[i]}.</span>
+                            <span>{opt}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Submit Button */}
+              <div className="flex items-center justify-between p-6 rounded-lg border bg-accent/30 sticky bottom-4">
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-medium">{Object.keys(selectedAnswers).length}</span> of <span className="font-medium">{currentTest.questions?.length || 0}</span> questions answered
+                </div>
+                <div className="flex gap-3">
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      if (confirm('Are you sure you want to exit without submitting?')) {
+                        setTestActive(false);
+                        setCurrentTest(null);
+                        setSelectedAnswers({});
+                      }
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={submitTest}
+                    size="lg"
+                    className="btn-success px-8"
+                    disabled={Object.keys(selectedAnswers).length === 0}
+                  >
+                    <CheckCircle className="h-5 w-5 mr-2" />
+                    Submit Test
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // Default view: Show test list and statistics
         return (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-bold text-foreground">Tests</h1>
-              {!testActive && (
-                <span className="text-sm text-muted-foreground">Select a test below to begin</span>
-              )}
+              <span className="text-sm text-muted-foreground">Select a test below to begin</span>
             </div>
             <div className="space-y-3">
               <div className="font-semibold">Available Tests</div>
@@ -975,7 +1132,7 @@ const StudentDashboard = () => {
                   const dur = t.duration_minutes ?? 60;
                   const deadline = t.scheduled_at ? new Date(new Date(t.scheduled_at).getTime() + (dur * 60000)) : null;
                   return (
-                    <div key={t._id || t.id} className="p-4 rounded border space-y-2">
+                    <div key={t._id || t.id} className="p-4 rounded border space-y-2 hover:shadow-md transition-shadow">
                       <div className="font-medium">{t.title}</div>
                       {t.description && <div className="text-sm text-muted-foreground">{t.description}</div>}
                       <div className="text-xs text-muted-foreground">Duration: {dur} min • Questions: {totalQ} • Total Marks: {t.total_marks ?? 100}</div>
@@ -992,35 +1149,6 @@ const StudentDashboard = () => {
                 )}
               </div>
             </div>
-            {testActive && (
-              <div className="p-4 rounded-lg border space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Time Left</span>
-                  <span className="text-xl font-semibold">{Math.floor(timeLeft/60).toString().padStart(2,'0')}:{(timeLeft%60).toString().padStart(2,'0')}</span>
-                </div>
-                <div className="space-y-4">
-                  {(currentTest?.questions || []).map((q: any, idx: number) => (
-                    <div key={idx} className="p-3 rounded-md border">
-                      <div className="font-medium mb-2">{idx+1}. {q.question}</div>
-                      <div className="grid sm:grid-cols-2 gap-2">
-                        {(q.options || []).map((opt: string, i: number) => (
-                          <button
-                            key={i}
-                            onClick={() => setSelectedAnswers(s => ({ ...s, [String(idx)]: i }))}
-                            className={`text-left px-3 py-2 rounded-md border ${selectedAnswers[String(idx)]===i ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'}`}
-                          >
-                            {letters[i]}. {opt}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-end">
-                  <Button onClick={submitTest}>Submit</Button>
-                </div>
-              </div>
-            )}
             {testResult && (
               <div className="p-4 rounded-lg border flex items-center justify-between">
                 <div>
@@ -1316,6 +1444,17 @@ const StudentDashboard = () => {
                         } else {
                           await api.submitWork({ type: 'test', ref_id: selectedTestForSubmit.id, text: testText || undefined, link: testLink || undefined });
                         }
+                        
+                        // Add notification for teacher
+                        addNotification({
+                          type: 'submission',
+                          title: 'New Test Submission',
+                          message: `${user?.name || 'A student'} submitted "${selectedTestForSubmit.title}"`,
+                          relatedId: selectedTestForSubmit.id,
+                          relatedName: selectedTestForSubmit.title,
+                          studentName: user?.name || user?.email
+                        });
+                        
                         alert('Test submitted');
                         setTestDialogOpen(false);
                       } catch (e) { alert('Failed to submit test'); }

@@ -1,12 +1,10 @@
 import { 
   BookOpen, 
-  Calendar, 
   ClipboardList, 
   MessageCircle, 
   PieChart, 
   FileText,
   Users,
-  Upload,
   TestTube,
   CheckSquare,
   Bell,
@@ -28,9 +26,7 @@ const navigation = [
   { name: "Manage Attendance", icon: CheckSquare, id: "attendance" },
   { name: "Course Plan", icon: FileText, id: "course-plan" },
   { name: "Student Progress", icon: Users, id: "progress" },
-  { name: "Resources", icon: Upload, id: "resources" },
   { name: "Notices", icon: Bell, id: "notices" },
-  { name: "Timetable", icon: Calendar, id: "timetable" },
 ];
 
 const TeacherSidebar = ({ activeSection, onSectionChange }: TeacherSidebarProps) => {
