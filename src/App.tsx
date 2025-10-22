@@ -11,6 +11,8 @@ import LoginForm from "@/components/auth/LoginForm";
 import RootLayout from "@/components/layout/RootLayout";
 import SignupForm from "@/components/auth/SignupForm";
 import CourseDetailPageWrapper from "@/pages/CourseDetailPage";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +28,8 @@ const App = () => (
               <Route index element={<Home />} />
               <Route path="login" element={<LoginForm />} />
               <Route path="signup" element={<SignupForm />} />
+              <Route path="forgot-password" element={<ForgotPassword />} />
+              <Route path="reset-password" element={<ResetPassword />} />
               <Route path="app" element={<RoleBasedLayout />} />
               <Route path="courses/:courseId" element={<CourseDetailPageWrapper />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

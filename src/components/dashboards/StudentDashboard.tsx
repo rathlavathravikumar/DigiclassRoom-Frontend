@@ -8,7 +8,7 @@ import AssignmentCard from "@/components/assignments/AssignmentCard";
 import NoticeBoard from "@/components/notices/NoticeBoard";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Plus, MessageCirclePlus, RefreshCw } from "lucide-react";
+import { Plus, MessageCirclePlus, RefreshCw, Calendar, Trophy, TrendingUp, TrendingDown, CheckCircle, XCircle, ArrowUpDown, BarChart3, Award } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,6 +48,17 @@ const StudentDashboard = () => {
   // Dashboard stats state
   const [studentStats, setStudentStats] = useState<{ enrolledCourses: number; completedAssignments: number; pendingAssignments: number; averageGrade: number } | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  
+  // Test statistics state
+  const [testStatistics, setTestStatistics] = useState<any[]>([]);
+  const [loadingTestStats, setLoadingTestStats] = useState(false);
+  const [sortBy, setSortBy] = useState<'date' | 'score' | 'name'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Assignment filtering state
+  const [assignmentFilter, setAssignmentFilter] = useState<'pending' | 'submitted'>('pending');
+  const [scoreDialogOpen, setScoreDialogOpen] = useState(false);
+  const [selectedAssignmentForScore, setSelectedAssignmentForScore] = useState<any | null>(null);
 
   const fetchAttendanceData = async (showLoading: boolean = true) => {
     if (!user?._id || courses.length === 0) return;
@@ -122,6 +133,49 @@ const StudentDashboard = () => {
     })();
   }, []);
 
+  // Function to fetch test statistics
+  const fetchTestStatistics = async () => {
+    if (!user?._id) return;
+    
+    setLoadingTestStats(true);
+    try {
+      // Fetch all marks for this student's tests
+      const marksRes = await api.listMarks({ type: 'test', student_id: user._id });
+      const marksData = (marksRes as any)?.data || [];
+      
+      // Fetch all tests to get test details
+      const testsRes = await api.getTests();
+      const testsData = (testsRes as any)?.data || [];
+      
+      // Combine marks with test details
+      const statistics = marksData.map((mark: any) => {
+        const test = testsData.find((t: any) => (t._id || t.id) === (mark.ref_id?._id || mark.ref_id));
+        const percentage = mark.max_score > 0 ? Math.round((mark.score / mark.max_score) * 100) : 0;
+        const status = percentage >= 60 ? 'Passed' : 'Failed'; // 60% passing grade
+        
+        return {
+          id: mark._id,
+          testId: mark.ref_id?._id || mark.ref_id,
+          testName: test?.title || 'Unknown Test',
+          date: mark.createdAt || test?.scheduled_at,
+          score: mark.score,
+          totalMarks: mark.max_score,
+          percentage,
+          status,
+          remarks: mark.remarks || '',
+          course: mark.course_id?.name || 'Unknown Course'
+        };
+      });
+      
+      setTestStatistics(statistics);
+    } catch (error) {
+      console.error('Failed to fetch test statistics:', error);
+      setTestStatistics([]);
+    } finally {
+      setLoadingTestStats(false);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       try {
@@ -143,6 +197,13 @@ const StudentDashboard = () => {
       }
     })();
   }, [user?._id]);
+
+  // Fetch test statistics when tests section is active
+  useEffect(() => {
+    if (activeSection === 'tests' && user?._id) {
+      fetchTestStatistics();
+    }
+  }, [activeSection, user?._id]);
 
   const letters = ['A','B','C','D'];
 
@@ -184,12 +245,14 @@ const StudentDashboard = () => {
       const data = (res as any)?.data || {};
       setTestResult({ score: data.score ?? 0, total: data.max_score ?? (currentTest.total_marks || 100) });
       setTestActive(false);
-      // refresh attempted set
+      // refresh attempted set and test statistics
       if (user?._id) {
         const marksRes = await api.listMarks({ type: 'test', student_id: user._id });
         const items = (marksRes as any)?.data || [];
         const ids = new Set(items.map((m: any) => (m.ref_id?._id || m.ref_id || m.id)));
         setAttemptedTestIds(ids as any);
+        // Refresh test statistics to include the new result
+        fetchTestStatistics();
       }
     } catch (e) {
       setTestActive(false);
@@ -201,7 +264,33 @@ const StudentDashboard = () => {
   // Course resources will be fetched from backend
   const [courseResources, setCourseResources] = useState<Record<string, any[]>>({});
 
-
+  // Sort test statistics
+  const sortedTestStatistics = [...testStatistics].sort((a, b) => {
+    let aValue, bValue;
+    
+    switch (sortBy) {
+      case 'date':
+        aValue = new Date(a.date || 0).getTime();
+        bValue = new Date(b.date || 0).getTime();
+        break;
+      case 'score':
+        aValue = a.percentage;
+        bValue = b.percentage;
+        break;
+      case 'name':
+        aValue = a.testName.toLowerCase();
+        bValue = b.testName.toLowerCase();
+        break;
+      default:
+        return 0;
+    }
+    
+    if (sortOrder === 'asc') {
+      return aValue > bValue ? 1 : -1;
+    } else {
+      return aValue < bValue ? 1 : -1;
+    }
+  });
 
   // Timetable for students (fetched from backend)
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
@@ -221,33 +310,95 @@ const StudentDashboard = () => {
   }, [activeSection]);
 
   const [assignments, setAssignments] = useState<any[]>([]);
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await api.getAssignments();
-        const items = (res as any)?.data || [];
-        const mapped = items.map((a: any, idx: number) => {
-          const due = a.due_date || a.dueDate;
-          const isOverdue = due ? new Date(due).getTime() < Date.now() : false;
-          return {
-            id: a._id || a.id || String(idx + 1),
-            title: a.title || "Assignment",
-            course: a.course_name || a.course || "Course",
-            dueDate: due || new Date().toISOString(),
-            status: (a.status as any) || "pending",
-            grade: a.grade,
-            totalMarks: a.totalMarks || 100,
-            description: a.description || "",
-            submissionType: a.submissionType || "File Upload",
-            isOverdue,
-          };
-        });
-        setAssignments(mapped);
-      } catch (e) {
-        setAssignments([]);
+  const [assignmentMarks, setAssignmentMarks] = useState<Record<string, any>>({});
+  
+  // Function to fetch assignments with their submission status and marks
+  const fetchAssignments = async () => {
+    try {
+      const res = await api.getAssignments();
+      const items = (res as any)?.data || [];
+      
+      // Fetch assignment marks for this student
+      let marksData: any[] = [];
+      if (user?._id) {
+        try {
+          const marksRes = await api.listMarks({ type: 'assignment', student_id: user._id });
+          marksData = (marksRes as any)?.data || [];
+        } catch (e) {
+          console.error('Failed to fetch assignment marks:', e);
+        }
       }
-    })();
-  }, []);
+      
+      // Create marks lookup
+      const marksLookup: Record<string, any> = {};
+      marksData.forEach((mark: any) => {
+        const refId = mark.ref_id?._id || mark.ref_id;
+        marksLookup[refId] = mark;
+      });
+      setAssignmentMarks(marksLookup);
+      
+      const mapped = items.map((a: any, idx: number) => {
+        const due = a.due_date || a.dueDate;
+        const isOverdue = due ? new Date(due).getTime() < Date.now() : false;
+        const assignmentId = a._id || a.id || String(idx + 1);
+        const mark = marksLookup[assignmentId];
+        
+        // Determine status: if there's a mark, it's been submitted
+        let status = "pending";
+        if (mark) {
+          status = "submitted";
+        }
+        
+        return {
+          id: assignmentId,
+          title: a.title || "Assignment",
+          course: a.course_name || a.course || "Course",
+          dueDate: due || new Date().toISOString(),
+          status: status,
+          grade: mark?.score,
+          totalMarks: mark?.max_score || a.totalMarks || 100,
+          description: a.description || "",
+          submissionType: a.submissionType || "File Upload",
+          isOverdue,
+          remarks: mark?.remarks || "",
+          submissionDate: mark?.createdAt,
+        };
+      });
+      setAssignments(mapped);
+    } catch (e) {
+      console.error('Failed to fetch assignments:', e);
+      setAssignments([]);
+    }
+  };
+  
+  useEffect(() => {
+    fetchAssignments();
+  }, [user?._id]);
+
+  // Filter and sort assignments
+  const filteredAndSortedAssignments = assignments
+    .filter(assignment => {
+      if (assignmentFilter === 'pending') {
+        return assignment.status === 'pending' || !assignment.status;
+      } else {
+        return assignment.status === 'submitted' || assignment.status === 'completed';
+      }
+    })
+    .sort((a, b) => {
+      // For pending assignments, sort by due date (ascending - earliest first)
+      // For submitted assignments, sort by submission date (descending - most recent first)
+      if (assignmentFilter === 'pending') {
+        const dateA = new Date(a.dueDate || 0).getTime();
+        const dateB = new Date(b.dueDate || 0).getTime();
+        return dateA - dateB; // Ascending order for due dates
+      } else {
+        // For submitted assignments, we might want to sort by submission date if available
+        // For now, sort by due date in descending order (most recent first)
+        const dateA = new Date(a.dueDate || 0).getTime();
+        const dateB = new Date(b.dueDate || 0).getTime();
+        return dateB - dateA; // Descending order
+      }
+    });
 
   const handleCourseClick = (courseId: string) => {
     setSelectedCourseId(courseId);
@@ -262,6 +413,12 @@ const StudentDashboard = () => {
     const found = assignments.find(a => a.id === assignmentId);
     setSelectedAssignmentForSubmit(found || null);
     setAssignDialogOpen(!!found);
+  };
+
+  const handleViewScore = (assignmentId: string) => {
+    const found = assignments.find(a => a.id === assignmentId);
+    setSelectedAssignmentForScore(found || null);
+    setScoreDialogOpen(!!found);
   };
 
   useEffect(() => {
@@ -382,6 +539,7 @@ const StudentDashboard = () => {
                       key={assignment.id}
                       assignment={assignment}
                       onAssignmentClick={handleAssignmentClick}
+                      onViewScore={handleViewScore}
                     />
                   ))}
                 </div>
@@ -405,14 +563,81 @@ const StudentDashboard = () => {
               <h1 className="text-3xl font-bold text-foreground">Assignments</h1>
             </div>
             
-            <div className="grid md:grid-cols-2 gap-6">
-              {assignments.map((assignment) => (
-                <AssignmentCard
-                  key={assignment.id}
-                  assignment={assignment}
-                  onAssignmentClick={handleAssignmentClick}
-                />
-              ))}
+            {/* Filter Buttons */}
+            <div className="flex items-center gap-4 p-4 bg-accent/30 rounded-lg">
+              <span className="text-sm font-medium text-muted-foreground">Filter by:</span>
+              <div className="flex gap-2">
+                <Button
+                  variant={assignmentFilter === 'pending' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setAssignmentFilter('pending')}
+                  className={`transition-all duration-200 ${
+                    assignmentFilter === 'pending' 
+                      ? 'bg-primary text-primary-foreground shadow-md' 
+                      : 'hover:bg-primary/10 hover:text-primary'
+                  }`}
+                >
+                  Pending Assignments
+                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-current/20">
+                    {assignments.filter(a => a.status === 'pending' || !a.status).length}
+                  </span>
+                </Button>
+                <Button
+                  variant={assignmentFilter === 'submitted' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setAssignmentFilter('submitted')}
+                  className={`transition-all duration-200 ${
+                    assignmentFilter === 'submitted' 
+                      ? 'bg-primary text-primary-foreground shadow-md' 
+                      : 'hover:bg-primary/10 hover:text-primary'
+                  }`}
+                >
+                  Submitted Assignments
+                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-current/20">
+                    {assignments.filter(a => a.status === 'submitted' || a.status === 'completed').length}
+                  </span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Assignment Cards */}
+            {filteredAndSortedAssignments.length === 0 ? (
+              <div className="text-center py-12 border rounded-lg bg-accent/20">
+                <div className="text-muted-foreground">
+                  {assignmentFilter === 'pending' 
+                    ? 'No pending assignments at the moment.' 
+                    : 'No submitted assignments yet.'}
+                </div>
+                <div className="text-sm text-muted-foreground mt-2">
+                  {assignmentFilter === 'pending' 
+                    ? 'Great job staying on top of your work!' 
+                    : 'Complete some assignments to see them here.'}
+                </div>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 gap-6">
+                {filteredAndSortedAssignments.map((assignment) => (
+                  <AssignmentCard
+                    key={assignment.id}
+                    assignment={assignment}
+                    onAssignmentClick={handleAssignmentClick}
+                    onViewScore={handleViewScore}
+                  />
+                ))}
+              </div>
+            )}
+
+// ... (rest of the code remains the same)
+            {/* Assignment Count and Sort Info */}
+            <div className="flex items-center justify-between text-sm text-muted-foreground px-2">
+              <span>
+                Showing {filteredAndSortedAssignments.length} {assignmentFilter} assignment{filteredAndSortedAssignments.length !== 1 ? 's' : ''}
+              </span>
+              <span>
+                {assignmentFilter === 'pending' 
+                  ? 'Sorted by due date (earliest first)' 
+                  : 'Sorted by date (most recent first)'}
+              </span>
             </div>
             <Dialog open={assignDialogOpen} onOpenChange={(o) => { setAssignDialogOpen(o); if (!o) { setSelectedAssignmentForSubmit(null); setAssignUploadFile(null); setAssignLink(""); setAssignText(""); } }}>
               <DialogContent>
@@ -448,8 +673,78 @@ const StudentDashboard = () => {
                         }
                         alert('Assignment submitted');
                         setAssignDialogOpen(false);
+                        // Refresh assignments list to show updated status
+                        await fetchAssignments();
+                        // Switch to submitted filter to show the newly submitted assignment
+                        setAssignmentFilter('submitted');
                       } catch (e) { alert('Failed to submit'); }
                     }}>Submit</Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Score Viewing Dialog */}
+            <Dialog open={scoreDialogOpen} onOpenChange={(o) => { setScoreDialogOpen(o); if (!o) { setSelectedAssignmentForScore(null); } }}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Award className="h-5 w-5 text-green-600" />
+                    Assignment Score
+                  </DialogTitle>
+                  <DialogDescription>{selectedAssignmentForScore?.title}</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 mt-4">
+                  <div className="text-center p-6 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200">
+                    <div className="text-3xl font-bold text-green-800 mb-2">
+                      {selectedAssignmentForScore?.grade || 0} / {selectedAssignmentForScore?.totalMarks || 0}
+                    </div>
+                    <div className="text-lg font-semibold text-green-700">
+                      {selectedAssignmentForScore?.grade && selectedAssignmentForScore?.totalMarks 
+                        ? Math.round((selectedAssignmentForScore.grade / selectedAssignmentForScore.totalMarks) * 100)
+                        : 0}%
+                    </div>
+                    <div className="text-sm text-green-600 mt-1">
+                      {selectedAssignmentForScore?.grade && selectedAssignmentForScore?.totalMarks 
+                        ? (selectedAssignmentForScore.grade / selectedAssignmentForScore.totalMarks) >= 0.6 
+                          ? "Great work!" 
+                          : "Keep improving!"
+                        : "Not graded yet"}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Course:</span>
+                      <span className="font-medium">{selectedAssignmentForScore?.course}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Due Date:</span>
+                      <span className="font-medium">
+                        {selectedAssignmentForScore?.dueDate 
+                          ? new Date(selectedAssignmentForScore.dueDate).toLocaleDateString()
+                          : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Submitted:</span>
+                      <span className="font-medium">
+                        {selectedAssignmentForScore?.submissionDate 
+                          ? new Date(selectedAssignmentForScore.submissionDate).toLocaleDateString()
+                          : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {selectedAssignmentForScore?.remarks && (
+                    <div className="p-3 bg-accent/30 rounded-lg">
+                      <div className="text-sm font-medium text-muted-foreground mb-1">Teacher's Remarks:</div>
+                      <div className="text-sm">{selectedAssignmentForScore.remarks}</div>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-end">
+                    <Button variant="outline" onClick={() => setScoreDialogOpen(false)}>Close</Button>
                   </div>
                 </div>
               </DialogContent>
@@ -735,6 +1030,260 @@ const StudentDashboard = () => {
                 <Button variant="outline" onClick={() => { setTestResult(null); }}>Close</Button>
               </div>
             )}
+
+            {/* Previous Test Statistics Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                  <BarChart3 className="h-6 w-6 text-primary" />
+                  Previous Test Statistics
+                </h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Sort by:</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (sortBy === 'date') {
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortBy('date');
+                        setSortOrder('desc');
+                      }
+                    }}
+                    className={`gap-1 ${sortBy === 'date' ? 'bg-primary/10 text-primary' : ''}`}
+                  >
+                    <Calendar className="h-3 w-3" />
+                    Date
+                    {sortBy === 'date' && (
+                      <ArrowUpDown className={`h-3 w-3 ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (sortBy === 'score') {
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortBy('score');
+                        setSortOrder('desc');
+                      }
+                    }}
+                    className={`gap-1 ${sortBy === 'score' ? 'bg-primary/10 text-primary' : ''}`}
+                  >
+                    <Trophy className="h-3 w-3" />
+                    Score
+                    {sortBy === 'score' && (
+                      <ArrowUpDown className={`h-3 w-3 ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (sortBy === 'name') {
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortBy('name');
+                        setSortOrder('asc');
+                      }
+                    }}
+                    className={`gap-1 ${sortBy === 'name' ? 'bg-primary/10 text-primary' : ''}`}
+                  >
+                    Name
+                    {sortBy === 'name' && (
+                      <ArrowUpDown className={`h-3 w-3 ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {loadingTestStats ? (
+                <div className="p-8 text-center">
+                  <div className="text-muted-foreground">Loading test statistics...</div>
+                </div>
+              ) : sortedTestStatistics.length === 0 ? (
+                <div className="p-8 text-center border rounded-lg">
+                  <Trophy className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">No Test History</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Complete some tests to see your performance statistics here.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full border rounded-lg">
+                      <thead className="bg-accent/50">
+                        <tr>
+                          <th className="text-left p-4 font-semibold">Test Name</th>
+                          <th className="text-left p-4 font-semibold">Date</th>
+                          <th className="text-left p-4 font-semibold">Score</th>
+                          <th className="text-left p-4 font-semibold">Total Marks</th>
+                          <th className="text-left p-4 font-semibold">Percentage</th>
+                          <th className="text-left p-4 font-semibold">Status</th>
+                          <th className="text-left p-4 font-semibold">Course</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedTestStatistics.map((stat, index) => (
+                          <tr key={stat.id} className={`border-t ${index % 2 === 0 ? 'bg-background' : 'bg-accent/20'}`}>
+                            <td className="p-4">
+                              <div className="font-medium text-foreground">{stat.testName}</div>
+                              {stat.remarks && (
+                                <div className="text-xs text-muted-foreground mt-1">{stat.remarks}</div>
+                              )}
+                            </td>
+                            <td className="p-4">
+                              <div className="text-sm text-muted-foreground">
+                                {stat.date ? new Date(stat.date).toLocaleDateString() : 'N/A'}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {stat.date ? new Date(stat.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <div className="font-semibold text-lg">{stat.score}</div>
+                            </td>
+                            <td className="p-4">
+                              <div className="font-semibold text-lg">{stat.totalMarks}</div>
+                            </td>
+                            <td className="p-4">
+                              <div className={`font-bold text-lg ${
+                                stat.percentage >= 80 ? 'text-green-600' :
+                                stat.percentage >= 60 ? 'text-yellow-600' :
+                                'text-red-600'
+                              }`}>
+                                {stat.percentage}%
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                                stat.status === 'Passed' 
+                                  ? 'bg-green-100 text-green-800 border border-green-200' 
+                                  : 'bg-red-100 text-red-800 border border-red-200'
+                              }`}>
+                                {stat.status === 'Passed' ? (
+                                  <CheckCircle className="h-3 w-3" />
+                                ) : (
+                                  <XCircle className="h-3 w-3" />
+                                )}
+                                {stat.status}
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <div className="text-sm text-muted-foreground">{stat.course}</div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Card View */}
+                  <div className="md:hidden space-y-4">
+                    {sortedTestStatistics.map((stat) => (
+                      <div key={stat.id} className="border rounded-lg p-4 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-foreground">{stat.testName}</h3>
+                            <p className="text-sm text-muted-foreground">{stat.course}</p>
+                          </div>
+                          <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                            stat.status === 'Passed' 
+                              ? 'bg-green-100 text-green-800 border border-green-200' 
+                              : 'bg-red-100 text-red-800 border border-red-200'
+                          }`}>
+                            {stat.status === 'Passed' ? (
+                              <CheckCircle className="h-3 w-3" />
+                            ) : (
+                              <XCircle className="h-3 w-3" />
+                            )}
+                            {stat.status}
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Date:</span>
+                            <div className="font-medium">
+                              {stat.date ? new Date(stat.date).toLocaleDateString() : 'N/A'}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Score:</span>
+                            <div className="font-medium">{stat.score} / {stat.totalMarks}</div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center justify-between pt-2 border-t">
+                          <div className="text-sm text-muted-foreground">Performance</div>
+                          <div className={`font-bold text-lg ${
+                            stat.percentage >= 80 ? 'text-green-600' :
+                            stat.percentage >= 60 ? 'text-yellow-600' :
+                            'text-red-600'
+                          }`}>
+                            {stat.percentage}%
+                          </div>
+                        </div>
+                        
+                        {stat.remarks && (
+                          <div className="text-xs text-muted-foreground bg-accent/30 p-2 rounded">
+                            {stat.remarks}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Statistics Summary */}
+                  {sortedTestStatistics.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+                      <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <BarChart3 className="h-4 w-4 text-blue-600" />
+                          <span className="text-sm font-medium text-blue-800">Total Tests</span>
+                        </div>
+                        <div className="text-2xl font-bold text-blue-900">{sortedTestStatistics.length}</div>
+                      </div>
+                      
+                      <div className="bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span className="text-sm font-medium text-green-800">Passed</span>
+                        </div>
+                        <div className="text-2xl font-bold text-green-900">
+                          {sortedTestStatistics.filter(s => s.status === 'Passed').length}
+                        </div>
+                      </div>
+                      
+                      <div className="bg-gradient-to-r from-yellow-50 to-yellow-100 border border-yellow-200 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Trophy className="h-4 w-4 text-yellow-600" />
+                          <span className="text-sm font-medium text-yellow-800">Average Score</span>
+                        </div>
+                        <div className="text-2xl font-bold text-yellow-900">
+                          {Math.round(sortedTestStatistics.reduce((sum, s) => sum + s.percentage, 0) / sortedTestStatistics.length)}%
+                        </div>
+                      </div>
+                      
+                      <div className="bg-gradient-to-r from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <TrendingUp className="h-4 w-4 text-purple-600" />
+                          <span className="text-sm font-medium text-purple-800">Best Score</span>
+                        </div>
+                        <div className="text-2xl font-bold text-purple-900">
+                          {Math.max(...sortedTestStatistics.map(s => s.percentage))}%
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
             <Dialog open={testDialogOpen} onOpenChange={(o) => { setTestDialogOpen(o); if (!o) { setSelectedTestForSubmit(null); setTestUploadFile(null); setTestLink(""); setTestText(""); } }}>
               <DialogContent>
                 <DialogHeader>

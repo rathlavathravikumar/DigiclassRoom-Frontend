@@ -1,4 +1,4 @@
-import { Calendar, Clock, FileText, AlertCircle } from "lucide-react";
+import { Calendar, Clock, FileText, AlertCircle, Eye, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -14,14 +14,17 @@ interface Assignment {
   description: string;
   submissionType: string;
   isOverdue: boolean;
+  remarks?: string;
+  submissionDate?: string;
 }
 
 interface AssignmentCardProps {
   assignment: Assignment;
   onAssignmentClick: (assignmentId: string) => void;
+  onViewScore?: (assignmentId: string) => void;
 }
 
-const AssignmentCard = ({ assignment, onAssignmentClick }: AssignmentCardProps) => {
+const AssignmentCard = ({ assignment, onAssignmentClick, onViewScore }: AssignmentCardProps) => {
   const getStatusColor = () => {
     switch (assignment.status) {
       case "submitted":
@@ -107,14 +110,35 @@ const AssignmentCard = ({ assignment, onAssignmentClick }: AssignmentCardProps) 
           Max Marks: {assignment.totalMarks}
         </span>
         
-        <Button 
-          size="sm"
-          onClick={() => onAssignmentClick(assignment.id)}
-          className={assignment.status === "pending" ? "btn-primary" : ""}
-          variant={assignment.status === "pending" ? "default" : "outline"}
-        >
-          {assignment.status === "pending" ? "Submit" : "View Details"}
-        </Button>  
+        <div className="flex gap-2">
+          {assignment.status === "submitted" && assignment.grade !== undefined && onViewScore ? (
+            <Button 
+              size="sm"
+              variant="outline"
+              onClick={() => onViewScore(assignment.id)}
+              className="gap-1 text-green-600 border-green-200 hover:bg-green-50"
+            >
+              <Award className="h-3 w-3" />
+              View Score
+            </Button>
+          ) : null}
+          
+          <Button 
+            size="sm"
+            onClick={() => onAssignmentClick(assignment.id)}
+            className={assignment.status === "pending" ? "btn-primary" : ""}
+            variant={assignment.status === "pending" ? "default" : "outline"}
+          >
+            {assignment.status === "pending" ? "Submit" : (
+              assignment.status === "submitted" ? (
+                <>
+                  <Eye className="h-3 w-3 mr-1" />
+                  View Details
+                </>
+              ) : "View Details"
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );

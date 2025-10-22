@@ -19,13 +19,17 @@ import {
   FileText,
   TrendingUp,
   Video,
-  Trash2
+  Trash2,
+  Bell,
+  ChevronDown,
+  ChevronUp,
+  Eye
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import { adminApi } from "@/lib/adminApi";
 import UpcomingMeetings from "@/components/meetings/UpcomingMeetings";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import MeetingForm from "@/components/meetings/MeetingForm";
 import TeacherCoursesList from "@/components/courses/TeacherCoursesList";
 import CourseDetailPage from "@/components/courses/CourseDetailPage";
@@ -44,6 +48,7 @@ const TeacherDashboard = () => {
   // Data for Notices / Assignments / Tests
   const { user } = useAuth();
   const [notices, setNotices] = useState<any[]>([]);
+  const [expandedNotices, setExpandedNotices] = useState<Set<string>>(new Set());
   const [assignments, setAssignments] = useState<any[]>([]);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
   const [assignmentDetail, setAssignmentDetail] = useState<any | null>(null);
@@ -629,63 +634,67 @@ const handleCourseResourceUpload = async () => {
 
       case "dashboard":
         return (
-          <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
-            {/* Header Section */}
-            <div className="mb-8 px-1">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="min-h-screen bg-gradient-to-br from-background via-muted/5 to-background">
+            {/* Enhanced Header Section */}
+            <div className="mb-10 px-2">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
                 <div>
-                  <h1 className="text-3xl lg:text-4xl font-bold text-foreground tracking-tight">
+                  <h1 className="text-4xl lg:text-5xl font-heading font-bold text-foreground tracking-tight mb-3">
                     Teacher Dashboard
                   </h1>
-                  <p className="text-muted-foreground mt-2 text-base">
+                  <p className="text-muted-foreground text-lg font-light">
                     Manage your courses and students efficiently
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-sm text-muted-foreground">
-                    {loadingStats ? 'Loading...' : `${teacherCourses.length} Active Courses`}
+                <div className="flex items-center gap-4">
+                  <div className="px-6 py-3 bg-primary/10 rounded-full border border-primary/20">
+                    <span className="text-sm font-semibold text-primary">
+                      {loadingStats ? 'Loading...' : `${teacherCourses.length} Active Courses`}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
             
-            {/* Stats Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-8">
+            {/* Enhanced Stats Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8 mb-12">
               {teacherStatsCards.map((stat, index) => {
                 const Icon = stat.icon;
                 
                 return (
                   <div 
                     key={index} 
-                    className="group relative bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+                    className="group relative bg-card border-2 border-border/30 rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 overflow-hidden"
                   >
-                    {/* Background Gradient */}
-                    <div className={`absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-300 ${
-                      stat.color === 'success' ? 'bg-gradient-to-br from-success to-success' :
-                      stat.color === 'warning' ? 'bg-gradient-to-br from-warning to-warning' :
-                      stat.color === 'primary' ? 'bg-gradient-to-br from-primary to-primary' : 'bg-gradient-to-br from-muted to-muted'
+                    {/* Enhanced Background Gradient */}
+                    <div className={`absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-500 ${
+                      stat.color === 'success' ? 'bg-gradient-to-br from-success via-success/50 to-success' :
+                      stat.color === 'warning' ? 'bg-gradient-to-br from-warning via-warning/50 to-warning' :
+                      stat.color === 'primary' ? 'bg-gradient-to-br from-primary via-purple-600 to-primary' : 'bg-gradient-to-br from-muted to-muted'
                     }`} />
                     
                     <div className="relative z-10">
-                      <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-start justify-between mb-6">
                         <div className="flex-1">
-                          <p className="text-sm font-medium text-muted-foreground mb-2 tracking-wide uppercase">
+                          <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wider uppercase">
                             {stat.title}
                           </p>
-                          <p className="text-3xl font-bold text-foreground leading-none">
-                            {loadingStats ? '...' : stat.value}
+                          <p className="text-4xl lg:text-5xl font-heading font-bold text-foreground leading-none">
+                            {loadingStats ? (
+                              <span className="animate-pulse">...</span>
+                            ) : stat.value}
                           </p>
                         </div>
-                        <div className={`p-3 rounded-xl shadow-sm ${
-                          stat.color === 'success' ? 'bg-success/10 text-success' :
-                          stat.color === 'warning' ? 'bg-warning/10 text-warning' :
-                          stat.color === 'primary' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                        <div className={`p-4 rounded-2xl shadow-lg group-hover:scale-110 transition-transform duration-300 ${
+                          stat.color === 'success' ? 'bg-gradient-to-br from-success/20 to-success/10 text-success' :
+                          stat.color === 'warning' ? 'bg-gradient-to-br from-warning/20 to-warning/10 text-warning' :
+                          stat.color === 'primary' ? 'bg-gradient-to-br from-primary/20 to-purple-600/10 text-primary' : 'bg-muted/20 text-muted-foreground'
                         }`}>
-                          <Icon className="h-6 w-6" />
+                          <Icon className="h-7 w-7" strokeWidth={2} />
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${
+                      <div className="flex items-center gap-2 pt-4 border-t border-border/30">
+                        <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${
                           stat.color === 'success' ? 'bg-success' :
                           stat.color === 'warning' ? 'bg-warning' :
                           stat.color === 'primary' ? 'bg-primary' : 'bg-muted-foreground'
@@ -702,68 +711,81 @@ const handleCourseResourceUpload = async () => {
 
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-              {/* My Courses Section */}
+              {/* Enhanced My Courses Section */}
               <div className="lg:col-span-5">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-                    <BookOpen className="h-5 w-5 text-primary" />
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-2xl font-heading font-bold text-foreground flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-xl">
+                      <BookOpen className="h-6 w-6 text-primary" strokeWidth={2} />
+                    </div>
                     My Courses
                   </h2>
                   <Button 
                     size="sm" 
                     variant="outline" 
                     onClick={() => setActiveSection('courses')}
-                    className="text-xs hover:bg-primary/5"
+                    className="text-sm font-semibold hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-all rounded-xl px-4 py-2"
                   >
-                    View All
+                    View All →
                   </Button>
                 </div>
-                <div className="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                <div className="space-y-5 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                   {teacherCourses.length > 0 ? (
                     teacherCourses.map((course: any) => (
                       <div 
                         key={course._id || course.id} 
-                        className="group bg-card border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary/20"
+                        className="group relative bg-card border-2 border-border/30 rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 hover:border-primary/30 hover:-translate-y-1 overflow-hidden"
                       >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-lg font-semibold text-foreground mb-2 truncate group-hover:text-primary transition-colors">
-                              {course.name || course.title}
-                            </h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <Users className="h-3.5 w-3.5" />
-                                {course.students_count || course.studentCount || 0} students
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <TestTube className="h-3.5 w-3.5" />
-                                {course.tests_count || 0} tests
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <FileText className="h-3.5 w-3.5" />
-                                {course.resourceCount || 0} resources
-                              </span>
+                        {/* Card Hover Gradient */}
+                        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                        
+                        <div className="relative z-10">
+                          <div className="flex items-start justify-between mb-5">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-xl font-heading font-bold text-foreground mb-3 truncate group-hover:text-primary transition-colors">
+                                {course.name || course.title}
+                              </h3>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm text-muted-foreground">
+                                <span className="flex items-center gap-2 font-medium">
+                                  <div className="p-1.5 bg-primary/10 rounded-lg">
+                                    <Users className="h-4 w-4 text-primary" />
+                                  </div>
+                                  {course.students_count || course.studentCount || 0} students
+                                </span>
+                                <span className="flex items-center gap-2 font-medium">
+                                  <div className="p-1.5 bg-purple-500/10 rounded-lg">
+                                    <TestTube className="h-4 w-4 text-purple-600" />
+                                  </div>
+                                  {course.tests_count || 0} tests
+                                </span>
+                                <span className="flex items-center gap-2 font-medium">
+                                  <div className="p-1.5 bg-blue-500/10 rounded-lg">
+                                    <FileText className="h-4 w-4 text-blue-600" />
+                                  </div>
+                                  {course.resourceCount || 0} resources
+                                </span>
+                              </div>
                             </div>
+                            <Badge className="status-due shrink-0 ml-4 px-3 py-1.5 text-sm font-semibold">
+                              {course.pendingSubmissions || 0} pending
+                            </Badge> 
                           </div>
-                          <Badge className="status-due shrink-0 ml-3">
-                            {course.pendingSubmissions || 0} pending
-                          </Badge> 
-                        </div>
-                        <div className="flex items-center justify-between pt-3 border-t border-border/50">
-                          <span className="text-sm text-muted-foreground flex items-center gap-1">
-                            <Calendar className="h-3.5 w-3.5" />
-                            {course.schedule || 'No schedule'}
-                          </span>
-                          <Button 
-                            size="sm" 
-                            className="btn-success h-8 px-4 text-xs"
-                            onClick={() => {
-                              setSelectedCourseId(course._id || course.id);
-                              setActiveSection('courses');
-                            }}
-                          >
-                            View Course
-                          </Button>
+                          <div className="flex items-center justify-between pt-4 border-t border-border/30">
+                            <span className="text-sm text-muted-foreground flex items-center gap-2 font-medium">
+                              <Calendar className="h-4 w-4" />
+                              {course.schedule || 'No schedule'}
+                            </span>
+                            <Button 
+                              size="sm" 
+                              className="btn-gradient h-10 px-6 text-sm font-semibold rounded-xl shadow-md hover:shadow-lg transition-all"
+                              onClick={() => {
+                                setSelectedCourseId(course._id || course.id);
+                                setActiveSection('courses');
+                              }}
+                            >
+                              View Course →
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -1045,21 +1067,111 @@ case "upload":
                 <CardTitle>Admin Notices</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {(notices || []).map((n: any) => (
-                  <div key={n._id || (n.title + n.createdAt)} className="p-4 border rounded-md">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-semibold">{n.title}</div>
-                        <div className="text-xs text-muted-foreground">{(n.priority || '').toUpperCase()} • {n.target}</div>
+                {(notices || []).map((n: any) => {
+                  const isExpanded = expandedNotices.has(n._id || (n.title + n.createdAt));
+                  const shouldTruncate = n.content && n.content.length > 200;
+                  
+                  return (
+                    <div key={n._id || (n.title + n.createdAt)} className="p-4 border rounded-md">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <div className="font-semibold">{n.title}</div>
+                            {n.priority === 'urgent' && (
+                              <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-xs">Urgent</Badge>
+                            )}
+                            {n.priority === 'important' && (
+                              <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">Important</Badge>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-2">
+                            {(n.priority || '').toUpperCase()} • {n.target} • Created: {n.createdAt ? new Date(n.createdAt).toLocaleString() : '-'}
+                          </div>
+                          <div className="text-sm">
+                            {shouldTruncate && !isExpanded ? (
+                              <p className="whitespace-pre-wrap break-words">
+                                {n.content.substring(0, 200)}...
+                              </p>
+                            ) : (
+                              <p className="whitespace-pre-wrap break-words">
+                                {n.content}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground text-right">
-                        <div>Created: {n.createdAt ? new Date(n.createdAt).toLocaleString() : '-'}</div>
-                        <div>Updated: {n.updatedAt ? new Date(n.updatedAt).toLocaleString() : '-'}</div>
+                      <div className="flex items-center justify-end space-x-2">
+                        {shouldTruncate && (
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="text-xs"
+                            onClick={() => {
+                              const newExpanded = new Set(expandedNotices);
+                              const noticeKey = n._id || (n.title + n.createdAt);
+                              if (isExpanded) {
+                                newExpanded.delete(noticeKey);
+                              } else {
+                                newExpanded.add(noticeKey);
+                              }
+                              setExpandedNotices(newExpanded);
+                            }}
+                          >
+                            {isExpanded ? (
+                              <>
+                                <ChevronUp className="h-3 w-3 mr-1" />
+                                Show Less
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-3 w-3 mr-1" />
+                                Read More
+                              </>
+                            )}
+                          </Button>
+                        )}
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button size="sm" variant="ghost" className="text-xs">
+                              <Eye className="h-3 w-3 mr-1" />
+                              View Full
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                            <DialogHeader>
+                              <DialogTitle className="flex items-center space-x-2">
+                                <span>{n.title}</span>
+                                {n.priority === 'urgent' && (
+                                  <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-xs">Urgent</Badge>
+                                )}
+                                {n.priority === 'important' && (
+                                  <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">Important</Badge>
+                                )}
+                              </DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                                <div className="flex items-center space-x-1">
+                                  <Bell className="h-4 w-4" />
+                                  <span>{n.target === 'students' ? 'For Students' : n.target === 'teachers' ? 'For Teachers' : 'For All'}</span>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                  <Calendar className="h-4 w-4" />
+                                  <span>{n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</span>
+                                </div>
+                              </div>
+                              <div className="prose prose-sm max-w-none">
+                                <p className="whitespace-pre-wrap break-words text-foreground leading-relaxed">
+                                  {n.content}
+                                </p>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                       </div>
                     </div>
-                    <div className="mt-2 text-sm">{n.content}</div>
-                  </div>
-                ))}
+                  );
+                })}
                 {(notices || []).length === 0 && (
                   <div className="text-sm text-muted-foreground">No notices.</div>
                 )}
