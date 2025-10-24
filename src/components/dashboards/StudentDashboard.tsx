@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { useNotificationWatcher } from "@/hooks/useNotificationWatcher";
 import UpcomingMeetings from "@/components/meetings/UpcomingMeetings";
+import MeetingsList from "@/components/meetings/MeetingsList";
 import StudentCoursesList from "@/components/courses/StudentCoursesList";
 import StudentProgress from "@/components/progress/StudentProgress";
 
@@ -559,6 +560,9 @@ const StudentDashboard = () => {
         
       case "progress":
         return <StudentProgress />;
+        
+      case "meetings":
+        return <MeetingsList userRole="student" userId={user?._id || user?.id || ""} />;
         
       // Discussions removed - now handled within individual course pages
         

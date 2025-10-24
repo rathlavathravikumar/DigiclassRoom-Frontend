@@ -1,8 +1,14 @@
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
 
-export default {
+const config: Config = {
   darkMode: ["class"],
-  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  content: [
+    "./pages/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+    "./app/**/*.{ts,tsx}",
+    "./src/**/*.{ts,tsx}"
+  ],
   prefix: "",
   theme: {
     container: {
@@ -67,7 +73,7 @@ export default {
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
-        },
+        }
       },
       backgroundImage: {
         "gradient-primary": "var(--gradient-primary)",
@@ -76,13 +82,28 @@ export default {
         "gradient-hero": "var(--gradient-hero)",
       },
       boxShadow: {
-        "card": "var(--shadow-card)",
-        "hover": "var(--shadow-hover)",
-        "focus": "var(--shadow-focus)",
+        card: "var(--shadow-card)",
+        hover: "var(--shadow-hover)",
+        focus: "var(--shadow-focus)",
       },
       fontFamily: {
-        "heading": "var(--font-heading)",
-        "body": "var(--font-body)",
+        heading: "var(--font-heading)",
+        body: "var(--font-body)",
+      },
+      fontSize: {
+        xs: ["0.75rem", { lineHeight: "1.5", letterSpacing: "-0.008em" }],
+        sm: ["0.875rem", { lineHeight: "1.6", letterSpacing: "-0.009em" }],
+        base: ["1rem", { lineHeight: "1.75", letterSpacing: "-0.011em" }],
+        lg: ["1.125rem", { lineHeight: "1.75", letterSpacing: "-0.012em" }],
+        xl: ["1.25rem", { lineHeight: "1.6", letterSpacing: "-0.014em" }],
+        "2xl": ["1.5rem", { lineHeight: "1.5", letterSpacing: "-0.017em" }],
+        "3xl": ["1.875rem", { lineHeight: "1.4", letterSpacing: "-0.019em" }],
+        "4xl": ["2.25rem", { lineHeight: "1.3", letterSpacing: "-0.022em" }],
+        "5xl": ["3rem", { lineHeight: "1.2", letterSpacing: "-0.025em" }],
+        "6xl": ["3.75rem", { lineHeight: "1.1", letterSpacing: "-0.028em" }],
+        "7xl": ["4.5rem", { lineHeight: "1", letterSpacing: "-0.031em" }],
+        "8xl": ["6rem", { lineHeight: "1", letterSpacing: "-0.034em" }],
+        "9xl": ["8rem", { lineHeight: "1", letterSpacing: "-0.037em" }],
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -91,20 +112,12 @@ export default {
       },
       keyframes: {
         "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
         },
       },
       animation: {
@@ -113,5 +126,7 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
-} satisfies Config;
+  plugins: [tailwindcssAnimate],
+};
+
+export default config;

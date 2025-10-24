@@ -176,8 +176,16 @@ export default function MeetingForm({ onSuccess, onCancel, initialData, mode = "
                 <FormItem>
                   <FormLabel>Meeting Title</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Math Class - Chapter 5" {...field} />
+                    <Input 
+                      placeholder="e.g., Math Class - Chapter 5" 
+                      {...field} 
+                      disabled={mode === "edit"}
+                      className={mode === "edit" ? "bg-muted cursor-not-allowed" : ""}
+                    />
                   </FormControl>
+                  {mode === "edit" && (
+                    <p className="text-xs text-muted-foreground">Title cannot be changed after creation</p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -209,7 +217,7 @@ export default function MeetingForm({ onSuccess, onCancel, initialData, mode = "
                   <FormLabel>Course</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value} disabled={mode === "edit"}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className={mode === "edit" ? "bg-muted cursor-not-allowed" : ""}>
                         <SelectValue placeholder="Select a course" />
                       </SelectTrigger>
                     </FormControl>
@@ -227,6 +235,9 @@ export default function MeetingForm({ onSuccess, onCancel, initialData, mode = "
                       )}
                     </SelectContent>
                   </Select>
+                  {mode === "edit" && (
+                    <p className="text-xs text-muted-foreground">Course cannot be changed after creation</p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

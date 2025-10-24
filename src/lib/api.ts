@@ -58,7 +58,7 @@ export const api = {
   getAssignment: async (id: string) => {
     return http<ApiEnvelope<any>>(`/api/v1/assignments/${id}`);
   },
-  createAssignment: async (payload: { title: string; description?: string; due_date: string; course_id: string }) =>
+  createAssignment: async (payload: { title: string; description?: string; due_date: string; course_id: string; total_marks?: number }) =>
     http<ApiEnvelope<any>>(`/api/v1/assignments`, { method: 'POST', body: JSON.stringify(payload) }),
   deleteAssignment: async (id: string) =>
     http<ApiEnvelope<any>>(`/api/v1/assignments/${id}`, { method: 'DELETE' }),

@@ -49,7 +49,8 @@ interface Meeting {
   duration: number;
   meeting_link: string;
   meeting_password?: string;
-  provider?: 'jitsi' | 'zoom' | 'googlemeet' | 'teams';
+  provider?: 'jitsi';
+  room_name?: string;
   status: 'scheduled' | 'ongoing' | 'completed' | 'cancelled';
   attendees: Array<{
     _id: string;
@@ -82,9 +83,17 @@ export default function MeetingCard({
   const scheduledTime = new Date(meeting.scheduled_time);
   const endTime = meeting.end_time ? new Date(meeting.end_time) : addMinutes(scheduledTime, meeting.duration);
   const now = new Date();
+  
+  // Calculate if teacher can start the meeting (15-20 minutes before)
+  const canStartTime = addMinutes(scheduledTime, -20); // 20 minutes before
+  const canStartMeeting = userRole === 'teacher' && 
+    isAfter(now, canStartTime) && 
+    isBefore(now, endTime) &&
+    meeting.status !== 'cancelled' &&
+    meeting.status !== 'completed';
 
-  // Delete meeting mutation
-  const deleteMutation = useMutation({
+  // Cancel meeting mutation (soft delete - changes status to cancelled)
+  const cancelMutation = useMutation({
     mutationFn: () => api.deleteMeeting(meeting._id),
     onSuccess: () => {
       toast.success("Meeting cancelled successfully");
@@ -93,6 +102,19 @@ export default function MeetingCard({
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to cancel meeting");
+    },
+  });
+  
+  // Delete meeting mutation (permanent delete)
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteMeeting(meeting._id),
+    onSuccess: () => {
+      toast.success("Meeting deleted permanently");
+      queryClient.invalidateQueries({ queryKey: ["meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["upcomingMeetings"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to delete meeting");
     },
   });
 
@@ -131,6 +153,27 @@ export default function MeetingCard({
     navigator.clipboard.writeText(meeting.meeting_link);
     toast.success("Meeting link copied to clipboard");
   };
+  
+  const handleStartMeeting = () => {
+    // Verify meeting link exists
+    if (!meeting.meeting_link) {
+      toast.error("Meeting link not available. Please try refreshing the page.");
+      console.error("Meeting link is missing:", meeting);
+      return;
+    }
+    
+    // Open meeting link in new tab
+    const newWindow = window.open(meeting.meeting_link, '_blank', 'noopener,noreferrer');
+    
+    if (!newWindow) {
+      toast.error("Please allow pop-ups for this site to open the meeting");
+      // Fallback: copy link to clipboard
+      navigator.clipboard.writeText(meeting.meeting_link);
+      toast.info("Meeting link copied to clipboard instead");
+    } else {
+      toast.success("Meeting started! Opening in new tab...");
+    }
+  };
 
   const getStatusBadge = () => {
     const statusConfig = {
@@ -153,9 +196,12 @@ export default function MeetingCard({
     (userRole === 'admin' || meeting.teacher_id._id === userId) &&
     meeting.status !== 'completed' && meeting.status !== 'cancelled';
 
-  const canDelete = userRole !== 'student' && 
+  const canCancel = userRole !== 'student' && 
     (userRole === 'admin' || meeting.teacher_id._id === userId) &&
     meeting.status === 'scheduled';
+    
+  const canDelete = userRole !== 'student' && 
+    (userRole === 'admin' || meeting.teacher_id._id === userId);
 
   const canJoin = meeting.can_join && meeting.status !== 'cancelled';
 
@@ -257,8 +303,39 @@ export default function MeetingCard({
         )}
 
         {/* Action buttons */}
-        {showActions && (canEdit || canDelete || (userRole !== 'student')) && (
+        {showActions && (canEdit || canCancel || canDelete || canStartMeeting) && (
           <div className="flex items-center gap-2 pt-2 border-t">
+            {/* Start Meeting Button - Only for teachers, 15-20 min before */}
+            {userRole === 'teacher' && (
+              <div className="flex-1">
+                {canStartMeeting ? (
+                  <Button
+                    size="sm"
+                    onClick={handleStartMeeting}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    <Video className="h-4 w-4 mr-1" />
+                    Start Meeting
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled
+                    className="cursor-not-allowed"
+                  >
+                    <Video className="h-4 w-4 mr-1" />
+                    Start Meeting
+                  </Button>
+                )}
+                {!canStartMeeting && meeting.status === 'scheduled' && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Available 20 minutes before start time
+                  </p>
+                )}
+              </div>
+            )}
+            
             {canEdit && onEdit && (
               <Button
                 variant="outline"
@@ -270,11 +347,12 @@ export default function MeetingCard({
               </Button>
             )}
 
-            {canDelete && (
+            {/* Cancel Meeting Button (Soft delete - changes status) */}
+            {canCancel && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
-                    <Trash2 className="h-4 w-4 mr-1" />
+                  <Button variant="outline" size="sm" className="text-orange-600 hover:text-orange-700">
+                    <AlertCircle className="h-4 w-4 mr-1" />
                     Cancel
                   </Button>
                 </AlertDialogTrigger>
@@ -282,8 +360,38 @@ export default function MeetingCard({
                   <AlertDialogHeader>
                     <AlertDialogTitle>Cancel Meeting</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Are you sure you want to cancel this meeting? This action cannot be undone.
-                      Students will no longer be able to join this meeting.
+                      Are you sure you want to cancel this meeting? 
+                      Students will no longer be able to join, but the meeting will remain in history.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep Meeting</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => cancelMutation.mutate()}
+                      className="bg-orange-600 hover:bg-orange-700"
+                    >
+                      Cancel Meeting
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+            
+            {/* Delete Meeting Button (Permanent delete) */}
+            {canDelete && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Meeting Permanently</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to permanently delete this meeting? This action cannot be undone.
+                      The meeting will be completely removed from the system.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -292,21 +400,12 @@ export default function MeetingCard({
                       onClick={() => deleteMutation.mutate()}
                       className="bg-red-600 hover:bg-red-700"
                     >
-                      Cancel Meeting
+                      Delete Permanently
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
             )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCopyLink}
-            >
-              <Copy className="h-4 w-4 mr-1" />
-              Copy Link
-            </Button>
           </div>
         )}
       </CardContent>

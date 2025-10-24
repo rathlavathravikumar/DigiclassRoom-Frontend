@@ -7,7 +7,8 @@ import {
   FileText,
   Clock,
   Users,
-  TrendingUp
+  TrendingUp,
+  Video
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const navigation = [
   { name: "Dashboard", icon: PieChart, id: "dashboard" },
   { name: "My Courses", icon: BookOpen, id: "courses" },
   { name: "My Progress", icon: TrendingUp, id: "progress" },
+  { name: "Meetings", icon: Video, id: "meetings" },
   { name: "Assignments", icon: ClipboardList, id: "assignments" },
   { name: "Timetable", icon: Calendar, id: "timetable" },
   { name: "Tests", icon: FileText, id: "tests" },

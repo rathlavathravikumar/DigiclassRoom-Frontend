@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bell, Check, X, Trash2, FileText, ClipboardList, Users } from 'lucide-react';
+import { Bell, Check, X, Trash2, FileText, ClipboardList, Users, Video, Megaphone, Award } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -25,6 +25,12 @@ const NotificationDropdown = () => {
         return <FileText className="h-4 w-4 text-purple-600" />;
       case 'submission':
         return <Check className="h-4 w-4 text-green-600" />;
+      case 'meeting':
+        return <Video className="h-4 w-4 text-indigo-600" />;
+      case 'announcement':
+        return <Megaphone className="h-4 w-4 text-orange-600" />;
+      case 'grade':
+        return <Award className="h-4 w-4 text-yellow-600" />;
       default:
         return <Bell className="h-4 w-4 text-gray-600" />;
     }
@@ -115,10 +121,10 @@ const NotificationDropdown = () => {
                       <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                         {notification.message}
                       </p>
-                      {notification.studentName && (
+                      {(notification.studentName || notification.metadata?.studentName) && (
                         <p className="text-xs text-primary mt-1 flex items-center gap-1">
                           <Users className="h-3 w-3" />
-                          {notification.studentName}
+                          {notification.studentName || notification.metadata?.studentName}
                         </p>
                       )}
                       <div className="flex items-center justify-between mt-2">

@@ -11,9 +11,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import NotificationDropdown from "@/components/notifications/NotificationDropdown";
+import { useNavigate } from "react-router-dom";
 
 const RoleBasedHeader = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const getRoleColor = () => {
     switch (user?.role) {
@@ -79,11 +81,11 @@ const RoleBasedHeader = () => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/profile')}>
                 <User className="mr-2 h-4 w-4" />
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
                 <Settings className="mr-2 h-4 w-4" />
                 Settings
               </DropdownMenuItem>

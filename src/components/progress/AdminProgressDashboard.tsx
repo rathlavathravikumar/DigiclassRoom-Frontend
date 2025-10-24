@@ -30,9 +30,13 @@ const AdminProgressDashboard = () => {
         setLoading(true);
         const response = await api.getAdminCoursesOverview();
         console.log('Admin courses overview response:', response);
-        setCoursesOverview((response as any)?.data || []);
+        const coursesData = (response as any)?.data || [];
+        console.log('Courses data:', coursesData);
+        console.log('First course structure:', coursesData[0]);
+        setCoursesOverview(coursesData);
       } catch (error) {
         console.error('Failed to fetch courses overview:', error);
+        setCoursesOverview([]);
       } finally {
         setLoading(false);
       }
@@ -194,10 +198,19 @@ const AdminProgressDashboard = () => {
               <label className="text-sm font-medium text-foreground mb-2 block">
                 Select Course for Detailed Analysis
               </label>
-              <Select value={selectedCourse} onValueChange={(value) => {
-                console.log('Course selected:', value);
-                setSelectedCourse(value);
-              }}>
+              <Select 
+                value={selectedCourse || undefined} 
+                onValueChange={(value) => {
+                  console.log('Course selected from dropdown:', value);
+                  console.log('Available courses:', coursesOverview.map(c => ({
+                    id: c._id || c.id,
+                    name: c.name
+                  })));
+                  if (value && value !== "no-courses") {
+                    setSelectedCourse(value);
+                  }
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Choose a course to analyze..." />
                 </SelectTrigger>
@@ -207,11 +220,14 @@ const AdminProgressDashboard = () => {
                       No courses available
                     </SelectItem>
                   ) : (
-                    coursesOverview.map((course) => (
-                      <SelectItem key={course.id} value={course.id}>
-                        {course.name} ({course.code}) - {course.studentCount} students
-                      </SelectItem>
-                    ))
+                    coursesOverview.map((course) => {
+                      const courseId = course._id || course.id;
+                      return (
+                        <SelectItem key={courseId} value={courseId}>
+                          {course.name} ({course.code}) - {course.studentCount} students
+                        </SelectItem>
+                      );
+                    })
                   )}
                 </SelectContent>
               </Select>
@@ -240,14 +256,16 @@ const AdminProgressDashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {coursesOverview.map((course) => (
-              <div 
-                key={course.id}
-                className={`p-4 border rounded-xl hover:shadow-md transition-all duration-200 cursor-pointer ${
-                  selectedCourse === course.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'
-                }`}
-                onClick={() => setSelectedCourse(course.id)}
-              >
+              {coursesOverview.map((course) => {
+                const courseId = course._id || course.id;
+                return (
+                  <div 
+                    key={courseId}
+                    className={`p-4 border rounded-xl hover:shadow-md transition-all duration-200 cursor-pointer ${
+                      selectedCourse === courseId ? 'border-primary bg-primary/5' : 'hover:border-primary/50'
+                    }`}
+                    onClick={() => setSelectedCourse(courseId)}
+                  >
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="font-semibold text-foreground">{course.name}</h3>
@@ -277,9 +295,10 @@ const AdminProgressDashboard = () => {
                     <span>{course.marksCount} assessments</span>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+                  </div>
+                );
+              })}
+            </div>
         </CardContent>
       </Card>
       )}
@@ -288,10 +307,19 @@ const AdminProgressDashboard = () => {
       {selectedCourse && (
         <Card className="dashboard-card">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PieChart className="h-5 w-5" />
-              Detailed Course Analysis
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <PieChart className="h-5 w-5" />
+                Detailed Course Analysis
+              </CardTitle>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setSelectedCourse("")}
+              >
+                ← Back to Overview
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {courseLoading ? (

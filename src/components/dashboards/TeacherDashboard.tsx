@@ -33,6 +33,7 @@ import { adminApi } from "@/lib/adminApi";
 import UpcomingMeetings from "@/components/meetings/UpcomingMeetings";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import MeetingForm from "@/components/meetings/MeetingForm";
+import MeetingsList from "@/components/meetings/MeetingsList";
 import TeacherCoursesList from "@/components/courses/TeacherCoursesList";
 import CourseDetailPage from "@/components/courses/CourseDetailPage";
 import CourseProgress from "@/components/progress/CourseProgress";
@@ -72,7 +73,7 @@ const TeacherDashboard = () => {
   const [teacherCourses, setTeacherCourses] = useState<any[]>([]);
   // Create Assignment form state
   const [showCreateAssignmentForm, setShowCreateAssignmentForm] = useState(false);
-  const [newAssignment, setNewAssignment] = useState<{ course_id: string; title: string; description: string; due_date: string }>({ course_id: "", title: "", description: "", due_date: "" });
+  const [newAssignment, setNewAssignment] = useState<{ course_id: string; title: string; description: string; due_date: string; total_marks: string }>({ course_id: "", title: "", description: "", due_date: "", total_marks: "100" });
   // Create Test form state
   const [showCreateTestPage, setShowCreateTestPage] = useState(false);
   const [newTest, setNewTest] = useState<{ course_id: string; title: string; description: string; scheduled_at: string; duration?: string }>({ course_id: "", title: "", description: "", scheduled_at: "", duration: "" });
@@ -1495,7 +1496,13 @@ case "upload":
                   </div>
                   <div>
                     <Label htmlFor="marks">Total Marks</Label>
-                    <Input id="marks" type="number" placeholder="100" />
+                    <Input 
+                      id="marks" 
+                      type="number" 
+                      placeholder="100" 
+                      value={newAssignment.total_marks}
+                      onChange={(e) => setNewAssignment({ ...newAssignment, total_marks: e.target.value })}
+                    />
                   </div>
                 </div>
                 <div>
@@ -1528,6 +1535,7 @@ case "upload":
                       description: newAssignment.description,
                       due_date: newAssignment.due_date,
                       course_id: newAssignment.course_id,
+                      total_marks: Number(newAssignment.total_marks) || 100,
                     });
                     
                     // Find course name for notification
@@ -1542,7 +1550,7 @@ case "upload":
                       relatedName: newAssignment.title
                     });
                     
-                    setNewAssignment({ course_id: '', title: '', description: '', due_date: '' });
+                    setNewAssignment({ course_id: '', title: '', description: '', due_date: '', total_marks: '100' });
                     // Hide form after successful creation
                     setShowCreateAssignmentForm(false);
                     // refresh list
@@ -1920,28 +1928,7 @@ case "upload":
         );
 
       case "meetings":
-        return (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h1 className="text-3xl font-bold text-foreground">Meetings</h1>
-              <Button onClick={() => setIsCreateMeetingDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Schedule Meeting
-              </Button>
-            </div>
-            <div className="text-center py-12">
-              <Video className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Meetings Feature</h3>
-              <p className="text-muted-foreground mb-4">
-                Schedule and manage online meetings for your courses.
-              </p>
-              <Button onClick={() => setIsCreateMeetingDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Schedule Your First Meeting
-              </Button>
-            </div>
-          </div>
-        );
+        return <MeetingsList userRole="teacher" userId={user?._id || user?.id || ""} />;
 
       case "progress":
         return <StudentProgressTracker />;
